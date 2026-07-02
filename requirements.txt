@@ -1,0 +1,11 @@
+# Dev / EDA stack. Heavy training typically runs in a GPU container.
+pandas>=2.0
+numpy>=1.26
+scikit-learn>=1.4
+pyarrow>=15.0
+tqdm>=4.66
+PyYAML>=6.0
+kaggle>=1.8.0
+kagglehub>=0.4.1
+lightgbm>=4.3
+catboost>=1.2

@@ -1,0 +1,25 @@
+.env
+.venv/
+output/
+__pycache__/
+*.pyc
+*.egg-info/
+.cache/
+.ipynb_checkpoints/
+.DS_Store
+.idea/
+
+# Competition data
+data/train.csv
+data/test.csv
+data/sample_submission.csv
+data/*.jsonl
+data/folds/
+data/features/
+
+# Model artifacts
+adapters/**/*.safetensors
+adapters/**/*.bin
+checkpoints/
+submission.csv
+submission.zip
