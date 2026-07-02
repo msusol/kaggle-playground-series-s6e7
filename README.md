@@ -1,5 +1,7 @@
 # Playground Series - Season 6, Episode 7 - Predicting Student Health Risk
 
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 https://www.kaggle.com/competitions/playground-series-s6e7
 
 Predict a 3-class student health risk label (`at-risk` / `unhealthy` / `fit`) from
@@ -46,3 +48,8 @@ zsh scripts/download_data.sh      # needs ~/.kaggle/kaggle.json + accepted rules
 ```
 
 See `docs/plans/implementation-plan.md` for the strategy ladder.
+
+---
+
+Scaffolded by the [kaggle plugin](https://github.com/msusol/claude-code-plugins/tree/main/kaggle)
+for Claude Code.
