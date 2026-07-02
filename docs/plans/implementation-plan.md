@@ -14,15 +14,28 @@ Two things dominate this ladder more than usual for a Playground tabular competi
   categorical) — imputation strategy and native-NaN-aware model choice matter more
   than exotic feature engineering.
 
+**EDA update (`notebook/v0.1-eda.ipynb`):** `stress_level` and `physical_activity_level`
+are unusually strong, near-deterministic signals (e.g. `stress_level == medium` -> 99.4%
+`at-risk`; `physical_activity_level == active` -> 17.2% `fit` vs. ~0.2-0.3% for
+`moderate`/`sedentary`). `sleep_quality` and `smoking_alcohol` are secondary signals;
+`diet_type` and `gender` show almost no class separation. Missingness matches train/test
+almost exactly (no leakage signal). Full findings in the notebook's summary cell.
+
 ## Rung 0 - Pipeline skeleton
 - Download data; emit an all-majority-class (`at-risk`) submission; confirm it scores
   ~0.333 balanced accuracy (the floor).
 
 ## Rung 1 - Cheap baseline
 - LightGBM/XGBoost multiclass on raw features, categoricals as native categorical
-  dtype, numeric NaNs left as-is (tree splits handle missing natively).
+  dtype (NaN as its own explicit level — do not mode-impute `stress_level` /
+  `physical_activity_level`, see EDA note above), numeric NaNs left as-is (tree
+  splits handle missing natively).
 - `class_weight='balanced'` (or per-class weights matching inverse frequency).
 - Validate the 5-fold stratified CV harness + submission format end-to-end.
+- Run a feature-importance / permutation-importance check after this fit — if
+  `stress_level` + `physical_activity_level` dominate as the EDA suggests, point
+  Rung 2 feature-engineering effort at interactions involving those two rather
+  than the low-signal `diet_type`/`gender`.
 
 ## Rung 2 - Stronger model
 - Feature engineering: missingness indicators per column (is the NaN itself
