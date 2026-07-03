@@ -7,8 +7,8 @@
 - [ ] Trivial submission scores at the floor (sanity)
 
 ## Phase 1 - Baseline (v0.1)
-- [x] EDA (`notebook/v0.1-eda.ipynb` — see findings summary + implementation-plan.md)
-- [x] Baseline model + 5-fold CV (`notebook/v0.1-baseline.ipynb` — OOF balanced
+- [x] EDA (`notebooks/v0.1-eda.ipynb` — see findings summary + implementation-plan.md)
+- [x] Baseline model + 5-fold CV (`notebooks/v0.1-baseline.ipynb` — OOF balanced
       accuracy 0.9389 +/- 0.0012, recorded in leaderboard.md)
 - [x] First offline submission; record in leaderboard.md (submitted 2026-07-02,
       public LB 0.94051 vs. OOF 0.9389 — good CV<->LB correlation)

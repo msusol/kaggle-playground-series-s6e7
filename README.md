@@ -36,7 +36,7 @@ heavy class imbalance and near-universal per-column missingness well. See
 ```
 docs/   plans, adr, investigate, images
 scripts/  download_data.sh, ...
-notebook/ Kaggle kernel + kernel-metadata.json
+notebooks/ Kaggle kernel + kernel-metadata.json
 configs/  training YAML
 data/     train/test (gitignored)
 ```

@@ -14,7 +14,7 @@ Two things dominate this ladder more than usual for a Playground tabular competi
   categorical) — imputation strategy and native-NaN-aware model choice matter more
   than exotic feature engineering.
 
-**EDA update (`notebook/v0.1-eda.ipynb`):** `stress_level` and `physical_activity_level`
+**EDA update (`notebooks/v0.1-eda.ipynb`):** `stress_level` and `physical_activity_level`
 are unusually strong, near-deterministic signals (e.g. `stress_level == medium` -> 99.4%
 `at-risk`; `physical_activity_level == active` -> 17.2% `fit` vs. ~0.2-0.3% for
 `moderate`/`sedentary`). `sleep_quality` and `smoking_alcohol` are secondary signals;
@@ -25,7 +25,7 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
 - Download data; emit an all-majority-class (`at-risk`) submission; confirm it scores
   ~0.333 balanced accuracy (the floor).
 
-## Rung 1 - Cheap baseline — DONE (`notebook/v0.1-baseline.ipynb`)
+## Rung 1 - Cheap baseline — DONE (`notebooks/v0.1-baseline.ipynb`)
 - LightGBM multiclass on raw features, categoricals as native categorical
   dtype (NaN as its own explicit level — do not mode-impute `stress_level` /
   `physical_activity_level`, see EDA note above), numeric NaNs left as-is (tree

@@ -5,7 +5,7 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 | Version | Model | Key change | OOF | Kaggle LB | Notes |
 |---|---|---|---|---|---|
 | floor | - | all-majority-class (`at-risk`) | 0.333 (analytic) | _tbd_ | must-beat |
-| v0.1 | LightGBM multiclass | class_weight='balanced', native categoricals w/ NaN-as-level, 5-fold stratified | 0.9389 (+/- 0.0012) | 0.94051 | `notebook/v0.1-baseline.ipynb`; per-class recall at-risk 0.956 / fit 0.929 / unhealthy 0.932 |
+| v0.1 | LightGBM multiclass | class_weight='balanced', native categoricals w/ NaN-as-level, 5-fold stratified | 0.9389 (+/- 0.0012) | 0.94051 | `notebooks/v0.1-baseline.ipynb`; per-class recall at-risk 0.956 / fit 0.929 / unhealthy 0.932 |
 
 ## Run log
 
