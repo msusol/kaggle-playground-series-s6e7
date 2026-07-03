@@ -39,24 +39,45 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   (top-3) as predicted. **Unexpected**: `sleep_duration` (numeric) is the #2 signal —
   not obvious from univariate EDA histograms, likely a nonlinear/threshold or
   interaction effect. `diet_type`/`gender` confirmed lowest-importance.
-- **Not yet submitted to Kaggle** — `data/submission.csv` is written and validated,
-  pending an explicit submit to get the first LB score.
-- **Open question carried to Rung 2**: none of the 5 folds triggered early stopping
-  (all hit the `n_estimators=2000` cap) — worth trying more rounds / a lower learning
-  rate before adding feature engineering, to know how much headroom is left in the
-  current feature set alone.
+- Submitted to Kaggle 2026-07-02 (submission id 54284663): **public LB 0.94051** —
+  still the current best model.
 
-## Rung 2 - Stronger model
-- First, cheaply check whether Rung 1 was under-trained: more `n_estimators` /
-  lower learning rate, since no fold early-stopped at 2000 rounds.
-- Feature engineering: missingness indicators per column (is the NaN itself
-  informative — e.g. from a skipped survey question), simple interactions
-  (activity level x exercise duration, sleep quality x sleep duration,
-  `stress_level` x `sleep_duration` x `physical_activity_level` given how much
-  signal those three carry individually), target encoding for categoricals with
-  smoothing.
-- Compare LightGBM vs. CatBoost (CatBoost has strong native categorical + NaN
-  handling, worth a direct bake-off here).
+## Rung 2 - Stronger model — DONE, negative result (`notebooks/v0.2-feature-engineering.ipynb`)
+- **Training-budget ablation** (`n_estimators=5000, learning_rate=0.03` vs. v0.1's
+  `2000`/`0.05`, same features): **OOF 0.9290 — worse than v0.1's 0.9389.** The "no
+  fold early-stopped" observation from Rung 1 was misleading: early stopping tracks
+  `multi_logloss`, not balanced accuracy, so more rounds at a lower LR kept improving
+  logloss while drifting the decision boundary away from balanced per-class recall.
+  **Takeaway: don't chase training budget further on this feature set** — v0.1's
+  config was closer to a real optimum for the actual competition metric.
+- **Root-caused `sleep_duration`'s importance** (binned/quantile + interaction view):
+  genuine non-monotonic signal — short sleep (<6h) associates with ~37% `unhealthy`
+  (vs. ~8% baseline); mid-range sleep (6-8.5h) is ~90-99% `at-risk`; longer sleep
+  raises `fit` share to ~11-13%. Strong interaction with `stress_level`: at
+  `stress_level=low`, at-risk share drops sharply as sleep increases (favoring `fit`);
+  at `stress_level=high`, at-risk stays ~99.5% regardless of sleep except at very
+  short sleep, where it collapses toward `unhealthy`. Fully explains the v0.1 feature
+  importance ranking.
+- **Engineered features** (missingness indicators, `stress_level` x
+  `physical_activity_level` and `sleep_quality` x `smoking_alcohol` crosses,
+  `sleep_duration`-decile x `stress_level` cross, OOF smoothed multiclass target
+  encoding): **OOF 0.9255 — worse than both v0.1 and the budget-only ablation.**
+  Per-class recall traded minority-class accuracy for majority-class accuracy
+  (`fit` 0.929 -> 0.902, `unhealthy` 0.932 -> 0.908, `at-risk` 0.956 -> 0.966) — net
+  negative for balanced accuracy. The `sleepbin_x_stress` interaction feature itself
+  *is* highly informative (became the single top feature by gain, 9.0M, absorbing
+  nearly all of raw `stress_level`'s prior importance) — the interaction hypothesis
+  was correct — but the larger feature set (35 vs. 13) added more variance/overfitting
+  risk than it removed, net negative.
+- **v0.1 remains the best model going into Rung 3.** Full run log and per-fold detail
+  in `leaderboard.md` and `docs/investigate/notebook-runs.md`.
+- **Carried lessons**: (1) tune/validate directly against the competition metric, not
+  a training-loss proxy, before assuming more training helps; (2) an individually
+  informative engineered feature does not guarantee a better model once it's added to
+  a larger feature set — validate the net CV effect, not just the feature's own
+  importance ranking; (3) CatBoost bake-off (native categorical + NaN handling, maybe
+  less prone to the overfitting seen here) is still untried and worth a shot before
+  concluding the feature set is saturated.
 
 ## Rung 3 - Contender
 - Threshold/decision-rule tuning per class on OOF predictions to directly optimize

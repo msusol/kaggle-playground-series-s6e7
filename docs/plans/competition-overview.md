@@ -15,6 +15,16 @@ not raw accuracy.[cite:1] This matters because the target is heavily imbalanced
 
 **Floor (must-beat):** ~0.333 (predict majority class `at-risk` for every row).
 
+Why the floor is 0.333 and not tied to the 85.9%/8.4%/5.8% split: balanced accuracy
+averages **per-class recall**, one term per class, regardless of how many rows each
+class has. A majority-only model gets `recall_at-risk = 1.0` (every true `at-risk` row
+is caught) but `recall_unhealthy = 0` and `recall_fit = 0` (neither is ever predicted),
+so the average is `(1 + 0 + 0) / 3 ≈ 0.333`. This is **1 / n_classes**, independent of
+the actual class percentages — with 3 classes the floor is always ~0.333 whether the
+majority class is 60% or 99% of the data. That's the point of the metric: plain
+accuracy would let a majority-only model score a deceptive ~85.9%; balanced accuracy
+exposes it as barely better than random guessing among 3 classes.
+
 ## Data
 
 | File | Rows | Columns |

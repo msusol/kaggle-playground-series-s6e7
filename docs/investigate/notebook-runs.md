@@ -145,3 +145,129 @@ burn a submission per experiment.
 - Rung 2 candidates per `implementation-plan.md`: feature engineering around
   `stress_level` x `sleep_duration` x `physical_activity_level` interactions, and a
   LightGBM vs. CatBoost bake-off.
+
+## v0.2-feature-engineering
+
+### Context
+
+- Notebook: `notebooks/v0.2-feature-engineering.ipynb`.
+- Purpose: Rung 2 of `docs/plans/implementation-plan.md` — (A) a training-budget
+  ablation on v0.1's exact feature set, (B) root-cause `sleep_duration`'s unexpected
+  #2 importance, (C) engineered features (missingness indicators, categorical
+  interactions, OOF smoothed multiclass target encoding), (D) retrain with the
+  engineered features at the tuned budget, compared against v0.1 (OOF 0.9389, LB
+  0.94051).
+- Run: first attempt via headless `nbconvert --execute --inplace` (background task
+  `bbgs5nu0v`) failed on a real bug (see Findings). After the fix, re-run live in
+  JupyterLab (user-driven, watched via `tqdm` progress bars added for this purpose)
+  so the user could monitor training directly rather than polling a headless process.
+
+### Investigation Checklist
+
+- [x] Reproduce and root-cause the `bbgs5nu0v` failure (`TypeError: '<' not supported
+      between instances of 'float' and 'str'`) before re-running the full ~40 min job.
+- [x] Verify the fix on a data sample before re-running at full scale (smoke test).
+- [x] Section A: training-budget ablation vs. v0.1's exact config.
+- [x] Section B: root-cause `sleep_duration` via binned/interaction view.
+- [x] Section D: retrain with engineered features at the Section A budget.
+- [x] Feature importance check on the engineered-feature model.
+- [x] Candidate `submission.csv` written and format-validated.
+
+### Findings
+
+- **Bug (first run, `bbgs5nu0v`)**: `pd.cut(test['sleep_duration'], bins=sleep_bin_edges)`
+  produces `NaN` not only for genuinely-missing `sleep_duration` values but also for
+  test values falling **outside train's bin range** (test min/max differ from train's).
+  The notebook's original NaN-sanitization only checked `test['sleep_duration'].isnull()`,
+  missing the out-of-range case. `astype(str)` on the resulting
+  `Categorical(Interval)` column does not reliably stringify those NaNs, so
+  `make_cross()`'s string concatenation mixed real float `NaN` with `str` values in the
+  `sleepbin_x_stress` cross feature, and `sorted(set(train[col].unique()) |
+  set(test[col].unique()))` raised `TypeError: '<' not supported between instances of
+  'float' and 'str'`. This wasted the full ~37 minutes of Section A compute from the
+  first run (headless `nbconvert` does not write partial results to disk on a cell
+  error — nothing was recoverable).
+- **Fix**: clip test's `sleep_duration` into train's bin range
+  (`test['sleep_duration'].clip(lower=sleep_bin_edges[0], upper=sleep_bin_edges[-1])`)
+  *before* cutting, so the only remaining `NaN` source is genuine missingness, which
+  the existing null-mask sanitization then correctly catches. Verified via a
+  standalone reproduction and a full-pipeline smoke test on a data sample before
+  committing to the full ~40+ minute re-run.
+- **A second clobbering incident**: after fixing the bug, a JupyterLab browser tab
+  that had the notebook open *before* the fix (loaded at first server start) had its
+  stale in-memory copy autosaved back to disk, silently reverting the file to the
+  pre-fix (and pre-tqdm) state. Caught by re-checking the file content for the fix's
+  signature strings before trusting it was actually applied. Resolved by having the
+  user close and reopen the tab fresh (not "revert to checkpoint", since the
+  checkpoint was also the stale version) after the fixes were reapplied.
+- **Section A (training-budget ablation)**: `n_estimators=5000, learning_rate=0.03`
+  (vs. v0.1's `2000`/`0.05`), same features, patience 100. **OOF 0.9290** — worse
+  than v0.1's 0.9389. 4/5 folds ran the full 5000 rounds. Early stopping tracks
+  `multi_logloss`, not balanced accuracy — more rounds at a lower LR kept improving
+  logloss while the decision boundary drifted away from balanced per-class recall.
+- **Section B (sleep_duration root-cause)**: confirmed a genuine non-monotonic signal.
+  Short sleep (<6h) -> ~60% at-risk / ~37% unhealthy (vs. ~8% baseline). Mid-range
+  sleep (6-8.5h) -> ~90-99% at-risk, near-zero unhealthy/fit. Longer sleep -> `fit`
+  share up to ~11-13%. Strong `stress_level` interaction: at `stress_level=low`,
+  at-risk share drops from ~99% (short sleep) to ~57-69% (longer sleep) — low stress +
+  adequate sleep strongly predicts `fit`. At `stress_level=high`, at-risk stays ~99.5%
+  regardless of sleep except at very short sleep, where it collapses toward
+  `unhealthy`. Fully explains v0.1's #2 importance ranking for this feature.
+- **Section D (engineered features)**: missingness indicators, `stress_level` x
+  `physical_activity_level` cross (16 categories), `sleep_quality` x
+  `smoking_alcohol` cross (16 categories), `sleep_duration`-decile x `stress_level`
+  cross (44 categories), OOF smoothed multiclass target encoding (4 columns x 3
+  classes = 12 features), same budget as Section A. **OOF 0.9255** — worse than
+  *both* v0.1 and Section A. Per-class recall shifted rather than improved: `at-risk`
+  0.956 -> 0.966, but `fit` 0.929 -> 0.902 and `unhealthy` 0.932 -> 0.908 — net
+  negative for balanced accuracy.
+- Feature importance on the Section D model: `sleepbin_x_stress` became the single
+  dominant feature (9.0M gain, more than double v0.1's raw `stress_level` at 4.59M),
+  and raw `stress_level` collapsed to near-zero importance (99.7) — fully absorbed
+  into the engineered feature. The interaction hypothesis from Section B was
+  confirmed correct at the feature-importance level, but the larger feature set
+  (35 vs. 13 columns) net-hurt CV, most likely from added variance — Section D's
+  per-fold `best_iteration` varied widely (4661-5000) vs. Section A's near-uniform
+  ~5000, suggesting less stable training.
+- The notebook's own logic correctly selected Section A (0.9290) over Section D
+  (0.9255) as the better of the two candidates for the written `submission.csv` — but
+  both still underperform v0.1's already-submitted 0.9389 OOF / 0.94051 LB.
+
+### Actions Taken
+
+- Root-caused and fixed the `sleep_duration_bin` NaN bug (clip-before-cut), verified
+  with a standalone script and a full-pipeline smoke test on a data sample.
+- Added `tqdm`/`ipywidgets`-based progress bars (outer bar per CV fold, inner bar per
+  boosting round via a custom LightGBM callback) to both `v0.2-feature-engineering.ipynb`
+  and `v0.1-baseline.ipynb` (for consistency on future re-runs), and to `requirements.txt`.
+- Detected and recovered from the JupyterLab stale-tab clobbering incident by
+  reapplying all fixes and instructing the user to reopen the notebook fresh.
+- Ran the full notebook live via JupyterLab (user-driven `Run All`), monitored
+  progress via `ps`/CPU-time checks and by reading live tqdm output in the `.ipynb`.
+- Recorded both v0.2 candidates in `docs/plans/leaderboard.md`, updated
+  `docs/plans/implementation-plan.md` (Rung 2 marked done, negative result, lessons
+  carried to Rung 3) and `docs/plans/TODO.md`.
+
+### Resolution
+
+**resolved** — Rung 2 complete with a real, informative negative result: neither the
+training-budget ablation nor the engineered features beat v0.1. v0.1 remains the best
+model. The `sleep_duration` x `stress_level` interaction hypothesis was confirmed
+correct in isolation (Section B, and Section D's feature importance) even though the
+overall engineered model regressed — a useful distinction between "this feature is
+informative" and "adding it nets a better model."
+
+### Follow-ups
+
+- **CatBoost bake-off** (per `implementation-plan.md`) is now more motivated: CatBoost's
+  native categorical/NaN handling and ordered boosting may be less prone to the
+  variance/overfitting pattern seen in Section D.
+- **Rung 3 threshold tuning** on v0.1's OOF predictions (not Section D's) is the next
+  concrete lever, since v0.1 remains the best base model.
+- If feature engineering is revisited, consider it in smaller increments (e.g. just
+  the `sleepbin_x_stress` cross alone, without the full target-encoding set) to
+  isolate which specific addition drives the regression, rather than evaluating the
+  whole engineered set as one bundle.
+- Submitted the Section A candidate to Kaggle despite the negative CV result, at the
+  user's request, to confirm CV<->LB correlation holds directionally for a regression
+  too — see `leaderboard.md` for the resulting score.
