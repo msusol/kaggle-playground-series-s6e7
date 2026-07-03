@@ -22,7 +22,7 @@ adapters/**/*.safetensors
 adapters/**/*.bin
 checkpoints/
 submission.csv
-submission_v*.csv
+submission_*.csv
 submission.zip
 
 # Notebook export artifacts

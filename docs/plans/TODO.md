@@ -4,7 +4,9 @@
 - [x] ~/.kaggle/kaggle.json present
 - [x] `zsh scripts/download_data.sh` exits 0 (halts + prints a rules-acceptance URL if
       the competition rules haven't been accepted yet — accept them and re-run)
-- [ ] Trivial submission scores at the floor (sanity)
+- [x] Trivial submission scores at the floor (sanity) — all-majority-class
+      (`at-risk`) submission scored public LB **0.33333**, exact match to the
+      analytic floor (submitted 2026-07-03, submission 54310528)
 
 ## Phase 1 - Baseline (v0.1)
 - [x] EDA (`notebooks/v0.1-eda.ipynb` — see findings summary + implementation-plan.md)

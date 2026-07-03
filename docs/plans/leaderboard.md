@@ -4,7 +4,7 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 
 | Version | Model | Key change | OOF | Kaggle LB | Notes |
 |---|---|---|---|---|---|
-| floor | - | all-majority-class (`at-risk`) | 0.333 (analytic) | _tbd_ | must-beat |
+| floor | - | all-majority-class (`at-risk`) | 0.333 (analytic) | **0.33333** | must-beat; confirmed 2026-07-03 (submission 54310528) — exact match to the analytic floor |
 | v0.1 | LightGBM multiclass | class_weight='balanced', native categoricals w/ NaN-as-level, 5-fold stratified | 0.9389 (+/- 0.0012) | 0.94051 | `notebooks/v0.1-baseline.ipynb`; per-class recall at-risk 0.956 / fit 0.929 / unhealthy 0.932 |
 | v0.2-A | LightGBM multiclass | same v0.1 features, n_estimators=5000/lr=0.03 (budget-only ablation) | 0.9290 | 0.93155 | `notebooks/v0.2-feature-engineering.ipynb`; **worse than v0.1** — more rounds/lower LR hurt |
 | v0.2-D | LightGBM multiclass | v0.2-A budget + missingness indicators, categorical interactions, OOF target encoding | 0.9255 | not submitted | `notebooks/v0.2-feature-engineering.ipynb`; **worse than both v0.1 and v0.2-A** |
