@@ -23,3 +23,6 @@ adapters/**/*.bin
 checkpoints/
 submission.csv
 submission.zip
+
+# Notebook export artifacts
+notebook/*.pdf

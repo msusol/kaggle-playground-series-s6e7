@@ -25,23 +25,36 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
 - Download data; emit an all-majority-class (`at-risk`) submission; confirm it scores
   ~0.333 balanced accuracy (the floor).
 
-## Rung 1 - Cheap baseline
-- LightGBM/XGBoost multiclass on raw features, categoricals as native categorical
+## Rung 1 - Cheap baseline — DONE (`notebook/v0.1-baseline.ipynb`)
+- LightGBM multiclass on raw features, categoricals as native categorical
   dtype (NaN as its own explicit level — do not mode-impute `stress_level` /
   `physical_activity_level`, see EDA note above), numeric NaNs left as-is (tree
   splits handle missing natively).
-- `class_weight='balanced'` (or per-class weights matching inverse frequency).
-- Validate the 5-fold stratified CV harness + submission format end-to-end.
-- Run a feature-importance / permutation-importance check after this fit — if
-  `stress_level` + `physical_activity_level` dominate as the EDA suggests, point
-  Rung 2 feature-engineering effort at interactions involving those two rather
-  than the low-signal `diet_type`/`gender`.
+- `class_weight='balanced'`.
+- 5-fold stratified CV harness + submission format validated end-to-end.
+- **Result: OOF balanced accuracy 0.9389 (+/- 0.0012)**. Per-class recall: at-risk
+  0.956, fit 0.929, unhealthy 0.932 — class weighting is working, no minority-class
+  collapse. Full run log in `leaderboard.md`.
+- Feature importance confirmed `stress_level` (top) and `physical_activity_level`
+  (top-3) as predicted. **Unexpected**: `sleep_duration` (numeric) is the #2 signal —
+  not obvious from univariate EDA histograms, likely a nonlinear/threshold or
+  interaction effect. `diet_type`/`gender` confirmed lowest-importance.
+- **Not yet submitted to Kaggle** — `data/submission.csv` is written and validated,
+  pending an explicit submit to get the first LB score.
+- **Open question carried to Rung 2**: none of the 5 folds triggered early stopping
+  (all hit the `n_estimators=2000` cap) — worth trying more rounds / a lower learning
+  rate before adding feature engineering, to know how much headroom is left in the
+  current feature set alone.
 
 ## Rung 2 - Stronger model
+- First, cheaply check whether Rung 1 was under-trained: more `n_estimators` /
+  lower learning rate, since no fold early-stopped at 2000 rounds.
 - Feature engineering: missingness indicators per column (is the NaN itself
   informative — e.g. from a skipped survey question), simple interactions
-  (activity level x exercise duration, sleep quality x sleep duration), target
-  encoding for categoricals with smoothing.
+  (activity level x exercise duration, sleep quality x sleep duration,
+  `stress_level` x `sleep_duration` x `physical_activity_level` given how much
+  signal those three carry individually), target encoding for categoricals with
+  smoothing.
 - Compare LightGBM vs. CatBoost (CatBoost has strong native categorical + NaN
   handling, worth a direct bake-off here).
 
