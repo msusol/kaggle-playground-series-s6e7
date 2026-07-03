@@ -363,10 +363,11 @@ Variant 1 is the new best model going into Rung 3.
 
 ### Follow-ups
 
-- **Submit Variant 1's `submission.csv` to Kaggle** to confirm CV<->LB correlation
-  holds for this improvement too — not yet done, pending explicit go-ahead.
-- **Rung 3 threshold tuning** should now target v0.3 Variant 1's OOF predictions, not
-  v0.1's — the current best model changed.
+- ~~Submit Variant 1's `submission.csv` to Kaggle~~ — done: LB 0.94885 (Variant 1),
+  LB 0.94913 (Variant 2, submitted separately to check whether the tiny CV gap held
+  on LB — it didn't, see the "Both variants submitted" note above).
+- **Rung 3 threshold tuning** should now target v0.3's OOF predictions, not
+  v0.1's — the current best model changed. See `v0.4-threshold-tuning` below.
 - Given Variant 2 (engineered features) didn't beat Variant 1 despite not regressing,
   the engineered feature set doesn't appear to hold real additional signal beyond
   what the base features already capture for CatBoost specifically — not an obviously
@@ -375,3 +376,94 @@ Variant 1 is the new best model going into Rung 3.
   (339-950, a ~3x range across folds) indicates fold-to-fold variance worth
   investigating, or is simply expected given `auto_class_weights='Balanced'`
   reweighting shifts the loss landscape per fold.
+
+## v0.4-threshold-tuning
+
+### Context
+
+- Notebook: `notebooks/v0.4-threshold-tuning.ipynb`.
+- Purpose: Rung 3 — check whether per-class weighted-argmax threshold tuning beats
+  plain argmax on v0.3's CatBoost predictions (argmax over raw probabilities isn't
+  necessarily balanced-accuracy-optimal under imbalance).
+- Base model: v0.3 Variant 2 (engineered features), chosen over Variant 1 because it
+  scored slightly higher on LB (0.94913 vs. 0.94885), even though the two are
+  statistically tied.
+- Run: built, then hit a real notebook-corruption bug while editing (see Findings),
+  fixed by a full rewrite, then executed live in JupyterLab per the user's standing
+  preference.
+
+### Investigation Checklist
+
+- [x] Root-cause and fix the cell-corruption bug before handing back to the user.
+- [x] Reproduce v0.3 Variant 2 capturing OOF probabilities (not just hard labels),
+      verified against v0.3's known exact result before trusting anything downstream.
+- [x] Weighted-argmax grid search on the full OOF set.
+- [x] Nested validation (fit weights on 4/5 folds, evaluate on the held-out 5th) for
+      an honest improvement estimate, not the optimistic same-data fit.
+- [x] Investigate relevant Kaggle discussion threads for external context on why the
+      result came out the way it did.
+
+### Findings
+
+- **Notebook-corruption bug**: while editing the notebook to switch its base model
+  from Variant 1 to Variant 2 (per user request), a sequence of `NotebookEdit` insert
+  + replace calls left the file with cells in the wrong order and some content
+  duplicated — traced to the fact that this notebook's cells had no real nbformat
+  `id` fields (unlike v0.1-v0.3, which were written cell-by-cell and picked up ids
+  along the way), so the Read tool's positional placeholder ids (`cell-0`, `cell-1`,
+  ...) silently pointed at different cells after earlier inserts shifted positions.
+  A user re-run hit `NameError: name 'ENGINEERED_FEATURES' is not defined` as a
+  direct symptom. Fixed by a full rewrite of the notebook file (verified cell order
+  and that every code cell compiles) rather than patching further via `NotebookEdit`.
+- **Reproduction**: exact match against v0.3 Variant 2 (`best_iterations [544, 765,
+  542, 354, 628]`, OOF 0.9491) — the OOF probability matrix is trustworthy.
+- **Full-OOF grid search**: best weights found were **w=(1.0, 1.0)** — plain argmax
+  was already optimal. Zero improvement, even on the same-data fit that's normally
+  mildly optimistic.
+- **Nested validation**: nested plain-argmax 0.9491 (+/- 0.0011), nested
+  tuned-argmax 0.9490 (+/- 0.0011). **Honest improvement estimate: -0.0001** — within
+  noise, not a real effect.
+- **External context**: see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`
+  for the full research (Kaggle discussion threads 717018 and 717222). Short version:
+  Georgy Mamarin (717018) independently found that stacking training-time
+  class-weighting with a *separate* post-hoc correction actively hurts (double-
+  correction), which directly explains our flat result — `auto_class_weights='Balanced'`
+  already spent the available correction during training. broccoli beef (717222)
+  found the original pre-synthesis dataset has a near-deterministic depth-4 decision
+  rule on `sleep_duration`/`stress_level`/`physical_activity_level`, suggesting our
+  ~0.95 ceiling is likely synthesis noise rather than a modeling gap.
+
+### Actions Taken
+
+- Fixed the notebook-corruption bug via a full rewrite (Write tool), verified cell
+  order and that every code cell compiles before handing back to the user.
+- Ran the full notebook live in JupyterLab (user-driven), monitored via `ps`/CPU-time
+  checks and by reading live print/tqdm output from the `.ipynb` JSON.
+- Investigated Kaggle discussion threads 717018 and 717222 via the `kaggle` CLI
+  (`competitions topics list` / `topic-messages`) after being corrected away from
+  browser automation — added `~/.cline/rules/kaggle-discussions.md` and a matching
+  memory entry so this preference persists across sessions. Full findings recorded
+  separately in `docs/investigate/2026-07-03-kaggle-discussion-findings.md`, per the
+  same rule file's convention of keeping external research out of notebook run logs.
+- Recorded the negative result and its explanation in `docs/plans/leaderboard.md`,
+  updated `docs/plans/implementation-plan.md` (Rung 3 marked done with mechanism)
+  and `docs/plans/TODO.md`.
+
+### Resolution
+
+**resolved** — a clean negative result with a concrete, externally-corroborated
+mechanism (double-correction of an already-balanced model), not just an empirical
+shrug. v0.3 (either variant, still tied) remains the best model. The discussion
+threads additionally suggest ~0.95 may be close to this dataset's practical ceiling
+given its likely origin as a noised synthesis of a near-deterministic rule.
+
+### Follow-ups
+
+- See `docs/investigate/2026-07-03-kaggle-discussion-findings.md` for the Rung 4
+  expectation-tempering and depth-4-rule-as-feature follow-ups that stem from the
+  discussion threads — kept there since the reasoning lives in that file.
+- The notebook-corruption bug is worth remembering as a general pattern: when editing
+  a notebook via `NotebookEdit` insert operations, re-`Read` the file immediately
+  after each insert to get real cell ids before issuing further edits, rather than
+  reusing ids/positions from an earlier Read — especially for notebooks whose cells
+  lack real nbformat `id` fields.

@@ -97,3 +97,31 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
   the other direction). Confirms the two variants are genuinely statistically tied on
   both CV and LB; the engineered feature set neither helps nor hurts CatBoost in any
   reliable way here. Either candidate is a reasonable Final Submission pick.
+
+### 2026-07-03 — v0.4 threshold tuning (Rung 3) — negative result, cleanly explained
+- Reproduced v0.3 Variant 2 (engineered features) capturing OOF probabilities this
+  time (v0.3's harness only stored hard labels). **Reproduction PASS: exact match**
+  (`best_iterations [544, 765, 542, 354, 628]`, OOF 0.9491, identical to v0.3).
+- Weighted-argmax grid search (`predict = argmax(proba * w)`, log-scale grid over
+  `w[fit]`/`w[unhealthy]`): **full-OOF best weights were w=(1.0, 1.0) — i.e. plain
+  argmax was already optimal, zero improvement found** even on the same-data fit
+  that's normally mildly optimistic.
+- **Nested validation** (fit weights on 4/5 folds, evaluate on the held-out 5th,
+  cycle across all folds): nested plain-argmax 0.9491 (+/- 0.0011), nested
+  tuned-argmax 0.9490 (+/- 0.0011). **Honest improvement estimate: -0.0001** — within
+  noise, no real gain. No new `submission.csv` written (correctly, per the notebook's
+  own decision threshold of 0.0005).
+- **Why**: per Kaggle discussion thread 717018 (Georgy Mamarin, see
+  `docs/investigate/notebook-runs.md`), stacking training-time class-weighting with a
+  *separate* post-hoc threshold/prior correction is a known pitfall — the second
+  correction double-corrects probabilities the first one already shifted, and can
+  actively hurt (he measured a drop to 0.9047 from ~0.950 for either alone). Our
+  CatBoost models were trained with `auto_class_weights='Balanced'`, so the balance
+  correction was already "spent" during training — there was nothing left for a
+  post-hoc weighted argmax to capture. This cleanly explains the flat result.
+- **v0.3 (either variant, still statistically tied) remains the best model.** Per the
+  same discussion thread, other competitors' independent pipelines land in the same
+  ~0.948-0.950 OOF / ~0.9498 LB range regardless of model family — likely because the
+  competition data is a noised synthesis of an underlying near-deterministic depth-4
+  decision rule (see `docs/investigate/notebook-runs.md`), meaning ~0.95 may be close
+  to the practical ceiling here, not a sign of being left on the table.

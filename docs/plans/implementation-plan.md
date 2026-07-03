@@ -107,14 +107,31 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   genuine training-setup issue, not a feature-set limitation — fixing the eval metric
   (not adding features or training budget) is what actually moved the needle.
 
-## Rung 3 - Contender
-- Threshold/decision-rule tuning per class on **v0.3 Variant 1's (CatBoost) OOF
-  predictions** (the current best model, not v0.1's) to directly optimize balanced
-  accuracy — argmax over class probabilities isn't necessarily balanced-accuracy-
-  optimal under imbalance, and CatBoost's custom-metric early stopping already gets
-  closer to the true objective than v0.1/v0.2 did, so there may be less headroom here
-  than originally expected, but worth checking.
-- _The model that wins; see versioned plan vX.Y._
+## Rung 3 - Contender — DONE, negative result, cleanly explained (`notebooks/v0.4-threshold-tuning.ipynb`)
+- Weighted-argmax (`predict = argmax(proba * w)`) grid search on v0.3 Variant 2's
+  reproduced OOF probabilities (reproduction verified exact vs. v0.3: OOF 0.9491,
+  identical `best_iterations`). **Full-OOF grid search found w=(1.0, 1.0) —
+  i.e. plain argmax was already optimal, zero improvement.**
+- **Nested validation** (fit weights on 4/5 folds, evaluate on the held-out 5th,
+  cycle across folds): honest improvement estimate **-0.0001** — within noise, no
+  real gain. No new submission written.
+- **Why, per Kaggle discussion 717018 (Georgy Mamarin)**: stacking training-time
+  class-weighting with a separate post-hoc threshold/prior correction is a known
+  pitfall — it double-corrects and can actively hurt (he measured 0.9047 vs. ~0.950
+  for either alone). Our models were trained with `auto_class_weights='Balanced'`,
+  so the balance correction was already spent during training; there was nothing
+  left for a post-hoc adjustment to capture. Confirms our own prediction ("may be
+  less headroom here than originally expected") with a concrete mechanism, not just
+  an empirical shrug.
+- **External context (same discussion + 717222, broccoli beef)**: the competition
+  data is likely a noised synthesis of a near-deterministic depth-4 decision rule on
+  `sleep_duration`/`stress_level`/`physical_activity_level` (100% accuracy on the
+  original pre-synthesis dataset). Multiple independent competitor pipelines
+  (different model families) converge to the same ~0.948-0.950 OOF / ~0.9498 LB
+  range regardless of approach — consistent with a synthesis-noise ceiling rather
+  than an easy gain being left unclaimed. Full details in
+  `docs/investigate/notebook-runs.md`.
+- **v0.3 (either variant, still tied) remains the best model going into Rung 4.**
 
 ## Rung 4 - Squeeze
 - Ensemble LightGBM + CatBoost + a regularized linear/NN baseline (blend or stack).

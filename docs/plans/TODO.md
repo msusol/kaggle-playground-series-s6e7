@@ -37,10 +37,30 @@
 - [x] Compare vs. v0.1 (0.9389) and v0.2 (0.9290 / 0.9255); recorded in leaderboard.md
       — **Variant 1 OOF 0.9493 (new best), Variant 2 OOF 0.9491 (tied)**
 - [x] Candidate submission.csv written from Variant 1 (best model overall)
-- [ ] Submit to Kaggle for LB confirmation — pending explicit go-ahead
+- [x] Submitted both variants to Kaggle: Variant 1 LB 0.94885, Variant 2 LB
+      **0.94913** (higher despite lower OOF) — confirms the two are genuinely tied
+      on both CV and LB, either is a defensible Final Submission pick
 
-## Phase 4+ - Stronger models
-- [ ] Rung 3: per-class threshold tuning on v0.3 Variant 1's OOF predictions (the
-      current best model, not v0.1's) — argmax isn't necessarily balanced-accuracy-
-      optimal under imbalance
-- [ ] Rung 4: ensemble / squeeze (see implementation-plan.md)
+## Phase 4 - Threshold tuning (v0.4) — done, negative result, cleanly explained
+- [x] Notebook built (`notebooks/v0.4-threshold-tuning.ipynb`): reproduce v0.3
+      Variant 2 (engineered features, since it scored higher on LB) capturing OOF
+      probabilities this time; weighted-argmax grid search over per-class weights;
+      nested validation (fit weights on 4/5 folds, evaluate on the held-out 5th) to
+      get an honest improvement estimate rather than trusting the same-data fit
+- [x] Smoke-tested full pipeline on a data sample before the full run
+- [x] Full run, live in JupyterLab — reproduction PASS (exact match vs. v0.3 Variant 2)
+- [x] Recorded nested-validated result in leaderboard.md: **honest improvement
+      -0.0001 — no real gain**, full-OOF grid search found plain argmax (w=1,1)
+      already optimal
+- [x] No new submission.csv (nested validation correctly found no real improvement)
+- [x] Investigated Kaggle discussion threads 717018/717222 for context — explains
+      the negative result (stacking class-weighting + post-hoc correction
+      double-corrects) and suggests ~0.95 may be near the practical ceiling for
+      this dataset (noised synthesis of a near-deterministic depth-4 rule)
+
+## Phase 5+ - Stronger models
+- [ ] Rung 4: ensemble / squeeze (see implementation-plan.md) — worth tempering
+      expectations given the likely synthesis-noise ceiling at ~0.95
+- [ ] Consider: does the depth-4 rule from discussion 717222 suggest any concrete
+      feature-engineering angle we haven't tried, or is ~0.949 genuinely close to
+      the ceiling regardless of approach?
