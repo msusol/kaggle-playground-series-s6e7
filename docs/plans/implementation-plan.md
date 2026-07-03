@@ -133,9 +133,27 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   `docs/investigate/notebook-runs.md`.
 - **v0.3 (either variant, still tied) remains the best model going into Rung 4.**
 
-## Rung 4 - Squeeze
-- Ensemble LightGBM + CatBoost + a regularized linear/NN baseline (blend or stack).
-- Pseudo-labeling from high-confidence test predictions if CV/LB stays well-correlated.
+## Rung 4 - Squeeze — DONE, negative result, cleanly explained (`notebooks/v0.5-ensemble.ipynb`)
+- Blended 4 members, each reproducing an exact validated config: LightGBM (v0.1),
+  CatBoost-V1 (v0.3 base features), CatBoost-V2 (v0.3 engineered features), and a new
+  regularized logistic regression (genuine architectural diversity, one-hot +
+  median-impute + standardize preprocessing). All reproductions PASS exact match.
+  LogisticRegression solo: 0.8994 (notably weaker, as expected for a linear model).
+- **4-way blend weight search (simplex grid) + nested validation**: full-OOF best
+  blend degenerates to 100% weight on CatBoost-V1 alone (0.9493, zero improvement
+  even on the optimistic same-data fit). **Nested-validated honest improvement:
+  -0.0002** — no real gain. Every subset blend that includes CatBoost-V1 caps out at
+  exactly its solo score; no combination beats it. No new submission written.
+- **Why**: directly confirms the Rung 3 prediction. Per discussion 717222, the
+  competition data is a noised synthesis of a near-deterministic depth-4 rule on the
+  same 3 features every one of our models already keys on — there are no
+  complementary errors left for an ensemble to correct. The architecturally-distinct
+  logistic regression adding nothing is stronger evidence for a synthesis-noise
+  ceiling than Rung 3 alone (rules out "wrong model family" as the gap's cause).
+- **v0.3 (either variant) remains the best model.** Two independent experiments
+  (Rung 3 threshold tuning, Rung 4 ensembling) both point at the same ceiling —
+  further squeeze attempts should be weighed against this before investing more
+  effort chasing marginal gains on this dataset.
 
 ## Cross-validation
 - 5-fold **stratified** (by target) given the imbalance; trust CV->LB correlation.

@@ -58,9 +58,30 @@
       double-corrects) and suggests ~0.95 may be near the practical ceiling for
       this dataset (noised synthesis of a near-deterministic depth-4 rule)
 
-## Phase 5+ - Stronger models
-- [ ] Rung 4: ensemble / squeeze (see implementation-plan.md) — worth tempering
-      expectations given the likely synthesis-noise ceiling at ~0.95
+## Phase 5 - Ensemble (v0.5) — done, negative result, cleanly explained
+- [x] Notebook built (`notebooks/v0.5-ensemble.ipynb`): 4-way blend — LightGBM v0.1,
+      CatBoost v0.3 Variant 1, CatBoost v0.3 Variant 2 (added after user asked
+      whether to include it — different feature view counts as diversity), and a
+      new regularized logistic regression baseline (genuine architectural
+      diversity); 4-way blend weight search + nested validation; subset blends for
+      comparison
+- [x] Smoke-tested full pipeline on a data sample before the full run (found and
+      fixed a real bug: `LogisticRegression(multi_class=...)` was removed in
+      sklearn 1.9 — dropped the arg, `lbfgs` handles multinomial automatically)
+- [x] Full run, live in JupyterLab (survived a mid-session disk-full incident that
+      silently killed the first attempt — user stopped the stalled kernel, disk
+      space recovered, notebook rewritten to 4-way and rerun cleanly)
+- [x] All 4 reproductions PASS exact match; LogReg solo 0.8994 (new, no baseline)
+- [x] Recorded nested-validated result in leaderboard.md: **honest improvement
+      -0.0002 — no real gain**, full-OOF grid search degenerates to 100% weight on
+      CatBoost-V1 alone; every subset blend containing CatBoost-V1 caps at its solo
+      score
+- [x] No new submission.csv (nested validation correctly found no real improvement)
+- [x] Stronger confirmation of the synthesis-noise-ceiling hypothesis from Rung 3 —
+      even the architecturally-distinct logistic regression adds nothing, arguing
+      against "wrong model family" as the cause of the ~0.949-0.951 plateau
+
+## Phase 6+ - Further ideas
 - [ ] Consider: does the depth-4 rule from discussion 717222 suggest any concrete
       feature-engineering angle we haven't tried, or is ~0.949 genuinely close to
       the ceiling regardless of approach?

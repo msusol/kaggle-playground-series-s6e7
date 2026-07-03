@@ -467,3 +467,111 @@ given its likely origin as a noised synthesis of a near-deterministic rule.
   after each insert to get real cell ids before issuing further edits, rather than
   reusing ids/positions from an earlier Read — especially for notebooks whose cells
   lack real nbformat `id` fields.
+
+## v0.5-ensemble
+
+### Context
+
+- Notebook: `notebooks/v0.5-ensemble.ipynb`.
+- Purpose: Rung 4 — check whether blending diverse model families beats the current
+  best single model (v0.3 CatBoost, OOF ~0.949).
+- Originally scoped as a 3-way blend (LightGBM + CatBoost-V1 + a new logistic
+  regression). User asked "should we use v0.3 Variant 2's exact config" before the
+  first run — expanded to a 4-way blend adding CatBoost-V2 (engineered features) as
+  a 4th member, since a different feature view can count as real diversity even
+  between two CatBoost runs.
+- Run: hit a system-wide disk-full incident (`ENOSPC`) mid-run on the first (3-way)
+  attempt, which silently stalled the kernel; user stopped it once disk space
+  recovered, notebook was rewritten to the 4-way version, and the full run completed
+  cleanly on the second attempt.
+
+### Investigation Checklist
+
+- [x] Reproduce LightGBM v0.1, CatBoost v0.3 Variant 1, and CatBoost v0.3 Variant 2,
+      capturing OOF + test probabilities (not just hard labels) this time, verified
+      against each's known exact result before trusting anything downstream.
+- [x] Build and fit a new regularized logistic regression baseline with proper
+      preprocessing (one-hot categoricals, median-impute + standardize numerics).
+- [x] 4-way blend weight search (simplex grid) + nested validation (fit weights on
+      4/5 folds, evaluate on the held-out 5th) for an honest improvement estimate.
+- [x] Subset blends (all pairs + triples) for comparison against the full 4-way.
+- [x] Monitor disk space throughout, given the mid-run incident.
+
+### Findings
+
+- **Disk-full incident**: mid-run on the first (3-way) attempt, `df -h` and even
+  trivial shell commands started failing with `ENOSPC: no space left on device` —
+  the volume containing `/private/tmp` (and likely the whole container) ran out of
+  free space. The live kernel (mid-training on the LightGBM member) went idle with
+  no further progress and no error captured in the notebook's own outputs —
+  consistent with the disk-full condition silently interrupting a background write
+  (CatBoost/LightGBM logging, autosave) rather than raising a visible Python
+  exception. User confirmed manually stopping the stalled kernel. Disk space
+  recovered on its own between checks (15GB -> 13GB -> 11GB free, stabilizing) by
+  the time the rewritten 4-way notebook was run.
+- **All 3 reproductions PASS** (exact match to known results): LightGBM 0.9389
+  (fold scores identical to v0.1: `[0.9397, 0.9402, 0.9389, 0.9389, 0.9367]`),
+  CatBoost-V1 0.9493 (`best_iterations [428, 950, 605, 339, 779]`, identical to
+  v0.3), CatBoost-V2 0.9491 (`best_iterations [544, 765, 542, 354, 628]`, identical
+  to v0.3).
+- **LogisticRegression (new member, no prior baseline)**: OOF **0.8994** — notably
+  weaker than the tree models, as expected for a linear model on this data. Recall
+  pattern matches the tree models' direction (at-risk 0.816 lower, fit 0.952 /
+  unhealthy 0.930 higher) — class-weighting works even for the weak learner, but its
+  decision boundary is much less expressive than the tree ensembles'.
+- **4-way blend weight search** (simplex grid, step 0.1, 286 combinations):
+  full-OOF best = **0.9493**, found at weights `{lgbm: 0, catboost_v1: 1.0,
+  catboost_v2: 0, logreg: 0}` — the optimistic same-data search degenerates to using
+  CatBoost-V1 alone. Zero improvement found even before nested validation.
+- **Nested validation**: nested solo CatBoost-V1 0.9493 (+/- 0.0011), nested 4-way
+  blend 0.9492 (+/- 0.0011). **Honest improvement estimate: -0.0002** — no real
+  gain. Per-fold blend weights fit on the other 4 folds mostly landed near
+  `(0, 1, 0, 0)` (pure CatBoost-V1), with one fold assigning some weight to LightGBM
+  and CatBoost-V2 — noise, not a stable pattern.
+- **Subset blends** (all pairs + triples): every combination that includes
+  CatBoost-V1 caps out at exactly 0.9493 (matching its solo score); no combination
+  beats it. `lgbm+logreg` (the two members *without* CatBoost-V1) tops out at just
+  0.9442 — notably worse, confirming CatBoost-V1 alone already captures what the
+  other members can offer.
+
+### Actions Taken
+
+- Smoke-tested the full pipeline (all 4 members + blend search + nested validation)
+  on a data sample before the full run; found and fixed a real bug —
+  `LogisticRegression(multi_class='multinomial', ...)` raised `TypeError` since
+  `multi_class` was removed in the installed sklearn 1.9 (the `lbfgs` solver now
+  handles multinomial softmax automatically for multi-class problems without the
+  parameter). Dropped the argument; verified the fix with a targeted repro before
+  rerunning the full smoke test.
+- Per the new notebook-corruption-avoidance rule in `kaggle-notebook-workflow.md`,
+  rewrote the whole notebook file via `Write` (rather than chaining `NotebookEdit`
+  inserts) when expanding from 3-way to 4-way, since this notebook's cells lacked
+  real nbformat ids.
+- Monitored disk space and kernel CPU/process state throughout via scheduled
+  check-ins; flagged the `ENOSPC` incident to the user immediately when first
+  observed rather than continuing to poll blindly.
+- Ran the full 4-way notebook live in JupyterLab (user-driven) after the disk issue
+  cleared; verified all reproduction-check cells passed before trusting the blend
+  results.
+- Recorded the negative result in `docs/plans/leaderboard.md`, updated
+  `docs/plans/implementation-plan.md` (Rung 4 marked done with mechanism) and
+  `docs/plans/TODO.md`.
+
+### Resolution
+
+**resolved** — a clean negative result, consistent with and stronger evidence for
+the synthesis-noise-ceiling hypothesis from Rung 3 (`v0.4-threshold-tuning` above):
+even an architecturally-distinct logistic regression adds nothing to the blend,
+arguing against "wrong model family" as an explanation for the ~0.949-0.951
+plateau. v0.3 (either variant) remains the best model.
+
+### Follow-ups
+
+- If further squeeze attempts are made (Rung 5+), weigh them against two independent
+  negative results (Rung 3 threshold tuning, Rung 4 ensembling) both pointing at the
+  same ceiling — see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`'s
+  follow-ups for the standing recommendation.
+- The disk-full incident was investigated only as far as confirming it happened and
+  that it recovered on its own; the root cause (what filled the disk) was not
+  identified. Worth a closer look if it recurs, since a silently-stalled kernel with
+  no error output is easy to miss.

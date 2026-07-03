@@ -10,6 +10,8 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 | v0.2-D | LightGBM multiclass | v0.2-A budget + missingness indicators, categorical interactions, OOF target encoding | 0.9255 | not submitted | `notebooks/v0.2-feature-engineering.ipynb`; **worse than both v0.1 and v0.2-A** |
 | v0.3-V1 | CatBoost multiclass | v0.1's exact 13 base features, `auto_class_weights='Balanced'`, custom balanced-accuracy eval metric for early stopping | 0.9493 | 0.94885 | `notebooks/v0.3-catboost-bakeoff.ipynb`; per-class recall at-risk 0.933 / fit 0.950 / unhealthy 0.965 |
 | v0.3-V2 | CatBoost multiclass | v0.3-V1 config + v0.2's 35-feature engineered set | 0.9491 | **0.94913** | `notebooks/v0.3-catboost-bakeoff.ipynb`; **statistically tied with v0.3-V1** — slightly lower OOF but slightly *higher* LB, confirming the two are within noise of each other either way |
+| v0.4 | CatBoost (v0.3-V2) + weighted-argmax | reproduces v0.3-V2, tunes per-class argmax weights | 0.9491 (nested: -0.0001 vs. plain argmax) | not submitted | `notebooks/v0.4-threshold-tuning.ipynb`; **negative result** — plain argmax already optimal, double-correction pitfall (see run log) |
+| v0.5 | 4-way blend: LightGBM + CatBoost-V1 + CatBoost-V2 + LogReg | reproduces v0.1/v0.3's exact configs + new LogReg baseline, nested-validated blend weight search | 0.9493 (nested blend: -0.0002 vs. solo CatBoost-V1) | not submitted | `notebooks/v0.5-ensemble.ipynb`; **negative result** — best blend degenerates to 100% CatBoost-V1, no diversity gain from any member |
 
 ## Run log
 
@@ -125,3 +127,45 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
   competition data is a noised synthesis of an underlying near-deterministic depth-4
   decision rule (see `docs/investigate/notebook-runs.md`), meaning ~0.95 may be close
   to the practical ceiling here, not a sign of being left on the table.
+
+### 2026-07-03 — v0.5 ensemble (Rung 4) — negative result, cleanly explained
+- Four members, each reproducing an exact validated config (no re-tuning): LightGBM
+  (v0.1's config, base features), CatBoost-V1 (v0.3's config, base features),
+  CatBoost-V2 (v0.3's config, v0.2's 35-feature engineered set), and a new regularized
+  logistic regression (base features, one-hot + median-impute + standardize
+  preprocessing — genuine architectural diversity from the tree models).
+- **All four reproductions PASS** (exact match to known results): LightGBM 0.9389,
+  CatBoost-V1 0.9493 (`best_iterations [428, 950, 605, 339, 779]`, identical to v0.3),
+  CatBoost-V2 0.9491 (`best_iterations [544, 765, 542, 354, 628]`, identical to v0.3).
+  LogisticRegression (new, no prior baseline): **0.8994** — notably weaker, as
+  expected for a linear model on this data, with the same recall pattern as other
+  models (at-risk 0.816 lower, fit 0.952 / unhealthy 0.930 higher — class-weighting
+  works even for the weak learner).
+- **4-way blend weight search (simplex grid, step 0.1, 286 combinations)**: full-OOF
+  best = **0.9493, found at weights {lgbm: 0, catboost_v1: 1.0, catboost_v2: 0,
+  logreg: 0}** — i.e. even the optimistic same-data search degenerates to using
+  CatBoost-V1 alone; zero improvement found even before nested validation.
+- **Nested validation** (fit weights on 4/5 folds, evaluate on the held-out 5th):
+  nested solo CatBoost-V1 0.9493 (+/- 0.0011), nested 4-way blend 0.9492 (+/- 0.0011).
+  **Honest improvement estimate: -0.0002** — no real gain. No new `submission.csv`
+  written (correctly, per the notebook's 0.0005 decision threshold).
+- **Subset blend comparison** (all pairs + triples): every combination that includes
+  CatBoost-V1 caps out at exactly 0.9493 (matching CatBoost-V1 solo); no combination
+  beats it. `lgbm+logreg` (the two members *without* CatBoost-V1) tops out at just
+  0.9442 — notably worse, confirming CatBoost-V1 alone already captures what the
+  other members can offer.
+- **Why**: directly confirms the Rung 3 finding's prediction. Per discussion thread
+  717222 (`docs/investigate/2026-07-03-kaggle-discussion-findings.md`), the
+  competition data is a noised synthesis of a near-deterministic depth-4 rule over
+  `sleep_duration`/`stress_level`/`physical_activity_level` — all four of our models
+  (including the architecturally-distinct logistic regression) already capture
+  essentially all the recoverable signal via these same features, so there are no
+  complementary errors left for an ensemble to correct. This is stronger evidence for
+  the synthesis-noise-ceiling hypothesis than Rung 3 alone: even a linear model with a
+  fundamentally different decision boundary shape adds nothing, which argues against
+  "wrong model family" as an explanation for the ~0.949-0.951 plateau.
+- **v0.3 (either variant) remains the best model at OOF ~0.949 / LB ~0.949.** Given
+  two independent Rung 3/4 experiments both cleanly point at a synthesis-noise
+  ceiling rather than a modeling gap, further squeeze attempts (Rung 5+) should be
+  weighed against this — see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`'s
+  follow-ups for the standing recommendation on this.
