@@ -5,9 +5,11 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 | Version | Model | Key change | OOF | Kaggle LB | Notes |
 |---|---|---|---|---|---|
 | floor | - | all-majority-class (`at-risk`) | 0.333 (analytic) | _tbd_ | must-beat |
-| v0.1 | LightGBM multiclass | class_weight='balanced', native categoricals w/ NaN-as-level, 5-fold stratified | **0.9389 (+/- 0.0012)** | **0.94051** | `notebooks/v0.1-baseline.ipynb`; **current best** — per-class recall at-risk 0.956 / fit 0.929 / unhealthy 0.932 |
+| v0.1 | LightGBM multiclass | class_weight='balanced', native categoricals w/ NaN-as-level, 5-fold stratified | 0.9389 (+/- 0.0012) | 0.94051 | `notebooks/v0.1-baseline.ipynb`; per-class recall at-risk 0.956 / fit 0.929 / unhealthy 0.932 |
 | v0.2-A | LightGBM multiclass | same v0.1 features, n_estimators=5000/lr=0.03 (budget-only ablation) | 0.9290 | 0.93155 | `notebooks/v0.2-feature-engineering.ipynb`; **worse than v0.1** — more rounds/lower LR hurt |
 | v0.2-D | LightGBM multiclass | v0.2-A budget + missingness indicators, categorical interactions, OOF target encoding | 0.9255 | not submitted | `notebooks/v0.2-feature-engineering.ipynb`; **worse than both v0.1 and v0.2-A** |
+| v0.3-V1 | CatBoost multiclass | v0.1's exact 13 base features, `auto_class_weights='Balanced'`, custom balanced-accuracy eval metric for early stopping | 0.9493 | 0.94885 | `notebooks/v0.3-catboost-bakeoff.ipynb`; per-class recall at-risk 0.933 / fit 0.950 / unhealthy 0.965 |
+| v0.3-V2 | CatBoost multiclass | v0.3-V1 config + v0.2's 35-feature engineered set | 0.9491 | **0.94913** | `notebooks/v0.3-catboost-bakeoff.ipynb`; **statistically tied with v0.3-V1** — slightly lower OOF but slightly *higher* LB, confirming the two are within noise of each other either way |
 
 ## Run log
 
@@ -58,3 +60,40 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
   CV<->LB correlation holds directionally even for a regression: **public LB
   0.93155** vs. OOF 0.9290 — closely tracks CV, and confirms it's worse than v0.1's
   0.94051 as expected. CV<->LB correlation remains trustworthy in both directions.
+
+### 2026-07-03 — v0.3 CatBoost bake-off — POSITIVE result, new best model
+- Directly acted on two Rung 2 lessons: (1) implemented a custom Python
+  `balanced_accuracy_score`-based CatBoost eval metric so early stopping tracks the
+  actual competition metric, not a `multi_logloss` proxy; (2) tested whether
+  CatBoost's ordered boosting + native categorical handling absorbs v0.2's engineered
+  feature set without the variance/regression LightGBM showed.
+- **Variant 1 (CatBoost, v0.1's exact 13 base features)**: `auto_class_weights='Balanced'`,
+  `iterations=3000, learning_rate=0.05, depth=6`, early stopping (patience 100) on the
+  custom balanced-accuracy metric. **best_iterations: [428, 950, 605, 339, 779]** —
+  early stopping fired well before the 3000-round cap in every fold (unlike v0.1/v0.2-A,
+  which never did under the `multi_logloss` proxy), confirming the hypothesis.
+  **OOF balanced accuracy: 0.9493 — beats v0.1's 0.9389 by +0.0104, the best model so
+  far.** Per-class recall: at-risk 0.933, fit 0.950, unhealthy 0.965 (vs. v0.1's
+  0.956 / 0.929 / 0.932) — CatBoost balances the classes more evenly, exactly what
+  the metric rewards, trading some at-risk recall for large minority-class gains.
+- **Variant 2 (CatBoost, v0.2's full 35-feature engineered set)**: same config.
+  **best_iterations: [544, 765, 542, 354, 628]**. **OOF balanced accuracy: 0.9491** —
+  essentially tied with Variant 1 (-0.0002, within fold-to-fold noise). Feature
+  importance shows the engineered features (`te_stress_x_activity_k1` #2 at 17.45,
+  `sleepbin_x_stress` at 5.32) are genuinely used, but — unlike LightGBM's Section D,
+  which regressed from 0.9389 to 0.9255 with the same feature set — CatBoost handled
+  the larger, more collinear feature set without a net loss. Supports the ordered
+  boosting hypothesis from the plan doc.
+- **Variant 1 auto-selected as best overall** (0.9493 > Variant 2's 0.9491 > all prior
+  runs); `data/submission.csv` written from it.
+- Submitted to Kaggle 2026-07-03 (submission id 54301243): **public LB 0.94885** vs.
+  OOF 0.9493 — closely tracks CV, and beats v0.1's 0.94051 by +0.00834. Confirms the
+  CatBoost improvement holds on the leaderboard, not just in CV.
+- **v0.1 is no longer the best model — v0.3 CatBoost (base or engineered features,
+  they're statistically tied) is.**
+- Also submitted Variant 2 (submission id 54301348, `data/submission_v2.csv`) to
+  check whether the tiny CV gap (Variant 1 +0.0002) held on the LB: it did not — LB
+  actually favored Variant 2 (**0.94913** vs. Variant 1's 0.94885, a +0.00028 flip in
+  the other direction). Confirms the two variants are genuinely statistically tied on
+  both CV and LB; the engineered feature set neither helps nor hurts CatBoost in any
+  reliable way here. Either candidate is a reasonable Final Submission pick.

@@ -271,3 +271,107 @@ informative" and "adding it nets a better model."
 - Submitted the Section A candidate to Kaggle despite the negative CV result, at the
   user's request, to confirm CV<->LB correlation holds directionally for a regression
   too — see `leaderboard.md` for the resulting score.
+
+## v0.3-catboost-bakeoff
+
+### Context
+
+- Notebook: `notebooks/v0.3-catboost-bakeoff.ipynb`.
+- Purpose: test whether CatBoost beats LightGBM v0.1 (OOF 0.9389, LB 0.94051), acting
+  directly on two Rung 2 lessons: (1) implement a real `balanced_accuracy_score`-based
+  custom CatBoost eval metric so early stopping tracks the actual competition metric,
+  not a `multi_logloss` proxy; (2) test whether CatBoost's ordered boosting absorbs
+  v0.2's engineered feature set without the regression LightGBM showed.
+- Run: built and smoke-tested (data-sample dry run) headlessly, then handed off for
+  live execution in JupyterLab per the user's standing preference to watch training
+  runs interactively rather than as a backgrounded `nbconvert` process.
+
+### Investigation Checklist
+
+- [x] Implement and verify a custom CatBoost eval metric (`is_max_optimal` /
+      `evaluate` / `get_final_error` protocol) computing real `balanced_accuracy_score`.
+- [x] Implement and verify a `TqdmCatBoostCallback` using CatBoost's `after_iteration(info)`
+      callback protocol (analogous to the LightGBM `TqdmCallback` from v0.1/v0.2).
+- [x] Smoke-test the full pipeline (both variants) on a data sample before the full run.
+- [x] Variant 1 (CatBoost, v0.1's 13 base features): full 5-fold run.
+- [x] Variant 2 (CatBoost, v0.2's 35 engineered features): full 5-fold run.
+- [x] Compare both variants against every prior run (v0.1, v0.2-A, v0.2-D).
+- [x] Feature importance check on both variants.
+- [x] Candidate `submission.csv` written from the actual best model across all runs
+      (not just the newest experiment).
+
+### Findings
+
+- **Numba investigation (tangential, during setup)**: installed `numba` hoping to
+  speed up the custom eval metric's per-iteration evaluation. It doesn't help here —
+  confirmed via two separate implementations that CatBoost's numba JIT can't compile
+  the `evaluate` method: the sklearn-based version fails because `numba` can't type
+  arbitrary Python library calls, and a pure-numpy rewrite still fails because
+  CatBoost passes `approxes` as a tuple-of-arrays shape numba's `nopython` mode
+  can't convert via `np.array()`. Both fall back safely to interpreted Python (correct
+  results, just no JIT speedup) — confirmed via smoke tests before concluding this,
+  not assumed. Not a real bottleneck anyway: the eval metric runs once per boosting
+  iteration on the validation fold, not in a hot per-row training loop, so CatBoost's
+  tree-building dominates actual training cost. Kept `numba` in `requirements.txt`
+  for potential future use elsewhere, documented honestly as a non-benefit here.
+- **Variant 1 (CatBoost, base features)**: `auto_class_weights='Balanced'`,
+  `iterations=3000, learning_rate=0.05, depth=6`, custom balanced-accuracy eval
+  metric, early stopping patience 100. **best_iterations: [428, 950, 605, 339, 779]**
+  — fired well before the 3000-round cap in every fold, unlike v0.1/v0.2-A which
+  never early-stopped under the `multi_logloss` proxy. **OOF balanced accuracy:
+  0.9493** — beats v0.1's 0.9389 by +0.0104, the best model so far. Per-class recall:
+  at-risk 0.933, fit 0.950, unhealthy 0.965 — more evenly balanced than v0.1's
+  0.956 / 0.929 / 0.932, consistent with directly optimizing the real metric during
+  training instead of a proxy.
+- **Variant 2 (CatBoost, engineered features)**: same config on v0.2's 35-feature set.
+  **best_iterations: [544, 765, 542, 354, 628]**. **OOF balanced accuracy: 0.9491** —
+  essentially tied with Variant 1 (-0.0002, within fold-to-fold noise). This directly
+  contrasts with LightGBM's Section D, which regressed from 0.9389 to 0.9255 on the
+  identical feature set — CatBoost's ordered boosting / native categorical handling
+  hypothesis (stated in the plan doc) held up: the larger, more collinear feature set
+  did not hurt CatBoost the way it hurt LightGBM. Feature importance shows the
+  engineered features are genuinely used (`te_stress_x_activity_k1` #2 at 17.45,
+  `sleepbin_x_stress` present at 5.32) but don't add net value over the simpler
+  base-feature model here.
+- **Variant 1 selected as the overall best model** (0.9493 > Variant 2's 0.9491 >
+  v0.1's 0.9389 > v0.2-A's 0.9290 > v0.2-D's 0.9255). `data/submission.csv` written
+  from Variant 1's averaged fold predictions.
+
+### Actions Taken
+
+- Built `notebooks/v0.3-catboost-bakeoff.ipynb` and `docs/plans/v0.3-catboost-bakeoff-plan.md`.
+- Smoke-tested the full pipeline (both variants, custom metric, tqdm callback,
+  feature-engineering reconstruction, comparison/submission logic) on a 20k/10k-row
+  data sample before committing to the full run — no bugs found this time (unlike
+  v0.2's `pd.cut` NaN bug), likely because the feature-engineering code was reused
+  verbatim from the already-debugged v0.2 notebook.
+- Investigated and ruled out a numba speedup for the custom eval metric (see Findings).
+- Handed off to the user for live execution in JupyterLab; monitored via `ps`/CPU-time
+  checks and by reading live tqdm/print output from the `.ipynb` JSON.
+- Sent an interim SMS update after Variant 1 finished (before Variant 2 completed),
+  given the significance of the result.
+- Recorded both variants in `docs/plans/leaderboard.md`, updated
+  `docs/plans/implementation-plan.md` (new Rung 2.5 section, Rung 3 updated to
+  reference the new best model) and `docs/plans/TODO.md`.
+
+### Resolution
+
+**resolved** — a genuine positive result. CatBoost with a metric-aware early-stopping
+setup beats LightGBM's best v0.1 model by a meaningful margin (+0.0104 OOF), and
+handles the previously-regressive engineered feature set without penalty. v0.3
+Variant 1 is the new best model going into Rung 3.
+
+### Follow-ups
+
+- **Submit Variant 1's `submission.csv` to Kaggle** to confirm CV<->LB correlation
+  holds for this improvement too — not yet done, pending explicit go-ahead.
+- **Rung 3 threshold tuning** should now target v0.3 Variant 1's OOF predictions, not
+  v0.1's — the current best model changed.
+- Given Variant 2 (engineered features) didn't beat Variant 1 despite not regressing,
+  the engineered feature set doesn't appear to hold real additional signal beyond
+  what the base features already capture for CatBoost specifically — not an obviously
+  productive direction to keep pushing on without a new hypothesis.
+- Worth considering whether Variant 1's early-stopping `best_iteration` spread
+  (339-950, a ~3x range across folds) indicates fold-to-fold variance worth
+  investigating, or is simply expected given `auto_class_weights='Balanced'`
+  reweighting shifts the loss landscape per fold.

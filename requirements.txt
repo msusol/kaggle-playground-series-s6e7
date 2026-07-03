@@ -14,3 +14,5 @@ ipykernel>=6.29
 nbconvert>=7.16
 jupyterlab>=4.6
 ipywidgets>=8.1
+numba>=0.66  # doesn't accelerate our custom CatBoost eval metric (tuple-of-arrays
+             # input isn't nopython-JIT-compatible) but harmless to have for other paths

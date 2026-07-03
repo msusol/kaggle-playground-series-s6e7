@@ -79,11 +79,41 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   less prone to the overfitting seen here) is still untried and worth a shot before
   concluding the feature set is saturated.
 
+## Rung 2.5 - CatBoost bake-off — DONE, positive result (`notebooks/v0.3-catboost-bakeoff.ipynb`)
+- Directly acted on the two Rung 2 lessons above: implemented a custom Python
+  `balanced_accuracy_score`-based CatBoost eval metric (instead of tracking
+  `multi_logloss`), and tested whether CatBoost absorbs v0.2's engineered feature set
+  without the regression LightGBM showed.
+- **Variant 1 (CatBoost, v0.1's exact 13 base features)**: `auto_class_weights='Balanced'`,
+  custom balanced-accuracy eval metric, early stopping. **best_iterations: [428, 950,
+  605, 339, 779]** — fired well before the 3000-round cap in every fold, confirming
+  the hypothesis that tracking the real metric fixes the "never early-stops" pattern.
+  **OOF balanced accuracy: 0.9493 — beats v0.1's 0.9389 by +0.0104. New best model.**
+  Per-class recall: at-risk 0.933, fit 0.950, unhealthy 0.965 — more evenly balanced
+  across classes than v0.1's 0.956 / 0.929 / 0.932.
+- **Variant 2 (CatBoost, v0.2's full 35-feature engineered set)**: same config, OOF
+  **0.9491** — essentially tied with Variant 1 (-0.0002). Unlike LightGBM's Section D
+  (which regressed from 0.9389 to 0.9255 on the identical feature set), CatBoost
+  handled the larger, more collinear feature set without a net loss — supports the
+  ordered-boosting hypothesis. The engineered features are genuinely used (feature
+  importance: `te_stress_x_activity_k1` #2, `sleepbin_x_stress` present) but don't
+  add value over the simpler base-feature model here.
+- **v0.3 (CatBoost) is now the best model — v0.1 no longer holds that spot.** Both
+  variants submitted to Kaggle: Variant 1 scored LB 0.94885, Variant 2 scored LB
+  **0.94913** (higher, despite slightly lower OOF) — a +0.00028 flip confirming the
+  two variants are genuinely statistically tied on both CV and LB, not just CV.
+  Either is a defensible choice for a Final Submission slot.
+- **Carried lesson confirmed**: the "no early stopping" pattern from Rung 1 was a
+  genuine training-setup issue, not a feature-set limitation — fixing the eval metric
+  (not adding features or training budget) is what actually moved the needle.
+
 ## Rung 3 - Contender
-- Threshold/decision-rule tuning per class on OOF predictions to directly optimize
-  balanced accuracy (argmax of raw probabilities does not necessarily maximize it
-  under imbalance) — e.g. searching per-class decision thresholds or a
-  cost-sensitive argmax.
+- Threshold/decision-rule tuning per class on **v0.3 Variant 1's (CatBoost) OOF
+  predictions** (the current best model, not v0.1's) to directly optimize balanced
+  accuracy — argmax over class probabilities isn't necessarily balanced-accuracy-
+  optimal under imbalance, and CatBoost's custom-metric early stopping already gets
+  closer to the true objective than v0.1/v0.2 did, so there may be less headroom here
+  than originally expected, but worth checking.
 - _The model that wins; see versioned plan vX.Y._
 
 ## Rung 4 - Squeeze
