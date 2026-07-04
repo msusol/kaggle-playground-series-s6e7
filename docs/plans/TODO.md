@@ -84,6 +84,56 @@
       against "wrong model family" as the cause of the ~0.949-0.951 plateau
 
 ## Phase 6+ - Further ideas
-- [ ] Consider: does the depth-4 rule from discussion 717222 suggest any concrete
+- [x] Consider: does the depth-4 rule from discussion 717222 suggest any concrete
       feature-engineering angle we haven't tried, or is ~0.949 genuinely close to
-      the ceiling regardless of approach?
+      the ceiling regardless of approach? — **answered**: investigated discussion
+      718258 (Masaya Kawamata, 13 model families incl. XGBoost variants,
+      factorization machines, 4 tabular/neural architectures), all landing in the
+      same ~0.946-0.951 band with CV/LB gaps within ±0.0011. Confirms the ceiling
+      with a much larger sample than before. See
+      `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+
+## Phase 7 - XGBoost one-vs-rest (v0.6) — done, flat result (per our threshold), highest LB submission
+- [x] Notebook built (`notebooks/v0.6-xgboost-ovr.ipynb`): 3 binary XGBoost
+      classifiers per fold (one per class, `scale_pos_weight` for imbalance,
+      native categorical via `enable_categorical=True`), combined via argmax;
+      reproduces CatBoost-V1 alongside for a same-data peg + blend check
+- [x] Added `xgboost` to `requirements.txt`
+- [x] Environment fix: XGBoost's macOS wheel needs OpenMP. Installed via MacPorts
+      (`sudo port install libomp`), then patched the installed `libxgboost.dylib`'s
+      rpath from the wheel's hardcoded Homebrew path to the real MacPorts path via
+      `install_name_tool` + `codesign` — permanent, no environment variable needed
+      (the earlier `DYLD_LIBRARY_PATH` approach doesn't actually work for
+      JupyterLab kernels; see `docs/process/xgboost-macos-setup.md`)
+- [x] Smoke-tested full pipeline on a data sample before the full run — all checks
+      passed; encouraging early signal (nested blend +0.0038 over solo at reduced
+      scale/budget, stronger than anything seen in v0.5), not conclusive at this
+      scale
+- [x] Full run #1 (2 members: XGB-OvR + CatBoost-V1 only) — **XGB-OvR solo 0.9493,
+      exact tie with CatBoost-V1**. 2-way blend: nested honest improvement
+      **+0.0001** — first-ever positive nested blend result in this project, but
+      below the 0.0005 submit threshold. No submission written.
+- [x] User caught a scoping gap: XGB-OvR uses engineered features (35) but the
+      only comparison peg was CatBoost-V1 (base features, 13) — apples-to-oranges.
+      Extended to 3 members, adding CatBoost-V2 (engineered features, same set as
+      XGB-OvR) for a cleaner comparison; added pairwise blend breakdown too.
+      Smoke-tested the extended pipeline before the full rerun.
+- [x] Full run #2 (3 members), live in JupyterLab — solo xgb_ovr 0.9493, catboost_v1
+      0.9493, catboost_v2 0.9491. Nested 3-way honest improvement: **+0.0001** —
+      same flat/negative-per-threshold result as run #1. Best pairwise same-data
+      combo: `xgb_ovr+catboost_v1` at 0.9495 (weights 0.46/0.54).
+- [x] Recorded final result in leaderboard.md — no submission written by the
+      notebook's own decision logic (correctly, given the flat honest-improvement
+      estimate)
+- [x] User asked to submit the `xgb_ovr+catboost_v1` blend anyway "for giggles" —
+      built directly from the live kernel's in-memory test probabilities (no
+      re-run needed) and submitted: **public LB 0.94937** — highest LB in this
+      project, but explicitly caveated in leaderboard.md as within the same noise
+      band as every other Rung 3-7 result, not a confirmed new best model
+- [x] Investigated the actual notebook behind discussion 718258's top `XGB_OvR`
+      row (`masayakawamata/s6e7-xgb-ovr-cv-0-95036`) — the author's own ~20-arm
+      ablation concludes OvR itself is a no-op vs. multiclass, and confirms
+      per-class `scale_pos_weight` (harmful) as a third independent instance of
+      the double-correction pitfall. Corroborates rather than contradicts our own
+      flat result. Full details in
+      `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.

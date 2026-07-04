@@ -12,6 +12,7 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 | v0.3-V2 | CatBoost multiclass | v0.3-V1 config + v0.2's 35-feature engineered set | 0.9491 | **0.94913** | `notebooks/v0.3-catboost-bakeoff.ipynb`; **statistically tied with v0.3-V1** — slightly lower OOF but slightly *higher* LB, confirming the two are within noise of each other either way |
 | v0.4 | CatBoost (v0.3-V2) + weighted-argmax | reproduces v0.3-V2, tunes per-class argmax weights | 0.9491 (nested: -0.0001 vs. plain argmax) | not submitted | `notebooks/v0.4-threshold-tuning.ipynb`; **negative result** — plain argmax already optimal, double-correction pitfall (see run log) |
 | v0.5 | 4-way blend: LightGBM + CatBoost-V1 + CatBoost-V2 + LogReg | reproduces v0.1/v0.3's exact configs + new LogReg baseline, nested-validated blend weight search | 0.9493 (nested blend: -0.0002 vs. solo CatBoost-V1) | not submitted | `notebooks/v0.5-ensemble.ipynb`; **negative result** — best blend degenerates to 100% CatBoost-V1, no diversity gain from any member |
+| v0.6 | XGBoost one-vs-rest (engineered feats) + CatBoost-V1/V2 | 3 binary XGB classifiers, `scale_pos_weight`, combined via argmax; blended with reproduced CatBoost-V1/V2 | 0.9493 solo (nested 3-way blend: +0.0001 vs. solo) | **0.94937** (2-way `xgb_ovr+catboost_v1` blend, weights 0.46/0.54) | `notebooks/v0.6-xgboost-ovr.ipynb`; **flat/negative per our own threshold** (honest improvement below 0.0005), but the curiosity-submission is the **highest LB score in this project so far** — see run log for the important caveat |
 
 ## Run log
 
@@ -169,3 +170,63 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
   ceiling rather than a modeling gap, further squeeze attempts (Rung 5+) should be
   weighed against this — see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`'s
   follow-ups for the standing recommendation on this.
+
+### 2026-07-03/04 — v0.6 XGBoost one-vs-rest (Phase 6) — flat result, but highest LB submission
+- Surfaced by Kaggle discussion 718258 (Masaya Kawamata): across 13 model
+  families, `XGB_OvR` scored highest (CV 0.95036 / LB 0.95040). Built our own
+  version: 3 independent binary XGBoost classifiers (one per class,
+  `scale_pos_weight` for imbalance, native categorical via `enable_categorical`),
+  combined via argmax, on the 35-feature engineered set.
+- Required adding `xgboost` to the project for the first time — needed a one-time
+  macOS/MacPorts environment fix (`libomp` via MacPorts + an `install_name_tool`
+  rpath patch, since the pip wheel expects Homebrew); documented in
+  `docs/process/xgboost-macos-setup.md`.
+- **First pass (2 members: XGB-OvR + CatBoost-V1)**: XGB-OvR solo **0.9493**, an
+  exact tie with CatBoost-V1. 2-way blend nested-validated honest improvement:
+  **+0.0001** — first-ever positive nested blend result in this project, though
+  below the 0.0005 submit threshold.
+- **User caught a scoping gap**: XGB-OvR uses engineered features (35, matching
+  v0.2/v0.3-V2) but the only comparison peg was CatBoost-V1 (base features, 13) —
+  an apples-to-oranges blend. Extended to 3 members, adding CatBoost-V2 (same
+  engineered features as XGB-OvR) for a cleaner comparison.
+- **Full 3-member result**: solo scores xgb_ovr 0.9493, catboost_v1 0.9493,
+  catboost_v2 0.9491. Full-OOF 3-way blend best: 0.9494 at weights
+  (xgb_ovr=0.55/0.4, catboost_v1=0.2/0.6, catboost_v2=0.25/0.0, varies by fold).
+  **Nested 3-way honest improvement: +0.0001** — same flat/negative-per-threshold
+  result as the 2-member pass. No submission written by the notebook's own logic.
+- **Pairwise breakdown** (same-data): `xgb_ovr+catboost_v1` 0.9495 (weights
+  0.46/0.54) was the single best pairwise combination — better than the full 3-way
+  blend or either other pair. `catboost_v1+catboost_v2` capped at 0.9493 (matching
+  solo), consistent with v0.5's finding that the two CatBoost variants are too
+  correlated to help each other.
+- **Curiosity submission**: user asked to submit the `xgb_ovr+catboost_v1` blend
+  (0.9495 same-data OOF) purely to see the actual LB number, despite it not
+  clearing our own honest-improvement threshold. Built directly from the live
+  kernel's in-memory test-set probabilities (via `jupyter_client`, no notebook
+  re-run needed) and submitted: **public LB 0.94937** (submission 54313483) — the
+  **highest LB score in this project so far**, edging out v0.3-V2's 0.94913 by
+  +0.00024 and v0.3-V1's 0.94885 by +0.00052.
+- **Important caveat, not a new best-model claim**: this LB delta (+0.0002 to
+  +0.0005 over prior submissions) sits squarely inside the same noise band this
+  whole investigation has repeatedly characterized as unreliable/non-actionable
+  (Rung 3's -0.0001, Rung 4's -0.0002, this notebook's own nested estimate of only
+  +0.0001). A single LB submission at this margin is not distinguishable from
+  public-slice noise (per discussion 718258's own analysis: minority-class LB
+  noise is on the order of ±0.001-0.002, since the public slice only has ~3.4k
+  `fit` + ~5.0k `unhealthy` rows). Treat this as "the two are statistically tied,
+  same as v0.3-V1 vs. V2," not as "the blend is confirmed better."
+- **Investigated the actual notebook behind discussion 718258's top-scoring row**
+  (`masayakawamata/s6e7-xgb-ovr-cv-0-95036`, pulled via `kaggle kernels pull`) —
+  the author's own ~20-arm ablation campaign concludes **"the OvR decomposition
+  itself — a no-op vs. the multiclass flagship"** and that per-class
+  `scale_pos_weight` (which our own XGB-OvR used) is actively harmful when
+  stacked with a separate decision-rule correction — a third independent
+  confirmation of the double-correction pitfall first seen via Georgy Mamarin's
+  notebook and our own v0.4. Full details in
+  `docs/investigate/2026-07-03-kaggle-discussion-findings.md`. This means our own
+  flat result is corroborated by, not contradicted by, the more rigorous
+  literature — the "0.95036, highest of 13" framing from the summary table was
+  misleading in isolation.
+- **v0.3 (either variant) remains the best model with a stable, credible
+  0.9493-0.9491 OOF backing it.** The v0.6 blend's marginally higher LB number
+  should not be treated as a confirmed improvement given everything above.

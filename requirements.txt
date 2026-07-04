@@ -9,6 +9,8 @@ kaggle>=1.8.0
 kagglehub>=0.4.1
 lightgbm>=4.3
 catboost>=1.2
+xgboost>=3.0  # macOS/MacPorts needs a one-time libomp rpath patch after install --
+              # see docs/process/xgboost-macos-setup.md before assuming `import xgboost` "just works"
 matplotlib>=3.8
 ipykernel>=6.29
 nbconvert>=7.16

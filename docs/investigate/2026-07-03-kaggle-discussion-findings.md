@@ -380,3 +380,234 @@ models), which remain unaffected by this correction.
 
 - None — this was a one-off clarification of a single table row at the user's
   request, not a new avenue for our own pipeline.
+
+## 718258 — "CV vs Public LB across 13 model families" (Masaya Kawamata)
+
+### Context
+
+- URL: https://www.kaggle.com/competitions/playground-series-s6e7/discussion/718258
+- User asked to investigate this thread for Phase 6 (`docs/plans/TODO.md`'s open
+  "is ~0.949 genuinely close to the ceiling regardless of approach?" question).
+- Read via `kaggle competitions topic-messages playground-series-s6e7 718258 -s old
+  -n -1 -v` (CLI, not browser). Author is Masaya Kawamata — the same person cited
+  twice already in Georgy Mamarin's cross-competitor table (XGBoost and RepLeafGBM
+  rows) — this thread is their own summary across a much larger sweep (13 published
+  single-model notebooks spanning GBDTs, factorization machines, and neural nets).
+
+### Investigation Checklist
+
+- [x] Read the full thread via the `kaggle` CLI.
+- [x] Extract the full CV-vs-Public-LB comparison table (not just the summary claim).
+- [x] Assess whether any of the 13 model families scored meaningfully above our own
+      ~0.949-0.951 range.
+- [x] Cross-check the "CV is the better compass" reasoning against our own
+      methodology (we've never tuned against the public LB either).
+
+### Findings
+
+- **Public/private split mechanics**: public LB is scored on only ~59,151 rows (20%
+  of test); private LB (final standings) on ~236,602 rows (80%); train is 690,088
+  rows — ~12x the public slice. Referenced last month's Playground (S6E6) having a
+  large shake-up from exactly this: overfitting to the public 20%.
+- **Why balanced accuracy amplifies public-slice noise specifically**: since
+  balanced accuracy is the mean of per-class recalls, the score is decided almost
+  entirely by the two minority classes — on the public slice that's only ~3.4k
+  `fit` + ~5.0k `unhealthy` rows. One flipped minority prediction moves public BA by
+  ~0.0001; binomial noise on minority recall alone is ~±0.001-0.002. This gives a
+  concrete mechanism for small CV/LB order-flips we've already observed ourselves
+  (v0.3 Variant 1 vs. Variant 2 flipped ranking by +0.00028 between OOF and LB).
+- **The comparison table — 13 model families, all sharing an identical
+  `StratifiedKFold(7, shuffle=True, random_state=42)` split** (note: 7-fold, vs. our
+  own 5-fold):
+  | model | family | CV | Public LB | LB − CV |
+  |---|---|---|---|---|
+  | XGB_OvR | XGBoost, one-vs-rest | 0.95036 | **0.95040** | +0.00004 |
+  | XGB_Diverse | XGBoost | 0.95023 | 0.94988 | −0.00035 |
+  | XGB_2 | XGBoost | 0.95010 | 0.94974 | −0.00036 |
+  | XGB_1 | XGBoost | 0.94986 | 0.94979 | −0.00007 |
+  | RepLeaf_1 | GBDT w/ linear leaves | 0.94964 | 0.94908 | −0.00056 |
+  | LGBM_1 | LightGBM | 0.94955 | 0.94859 | −0.00096 |
+  | GRN | tabular neural net | 0.94951 | 0.94932 | −0.00019 |
+  | GANDALF | tabular neural net | 0.94931 | 0.94947 | +0.00016 |
+  | LNN | neural net | 0.94938 | 0.94907 | −0.00031 |
+  | ResNet | neural net | 0.94943 | 0.94911 | −0.00032 |
+  | FwFM_1 | field-weighted factorization machine | 0.94679 | 0.94737 | +0.00058 |
+  | FFM_1 | field-aware factorization machine | 0.94653 | 0.94646 | −0.00007 |
+  | FM_1 | factorization machine | 0.94645 | 0.94752 | +0.00107 |
+  - **Every gap is within ±0.0011, mean gap ~-0.0001** — CV tracks LB almost 1:1
+    across all 13, with no systematic optimism. Directly matches our own CV↔LB
+    experience (v0.1: OOF 0.9389/LB 0.94051; v0.3-V1: OOF 0.9493/LB 0.94885; v0.3-V2:
+    OOF 0.9491/LB 0.94913 — all small, non-systematic gaps).
+  - **Ordering is broadly preserved** — the top 2 by CV (XGB_OvR, XGB_Diverse) are
+    the top 2 on LB. Models within ~0.0005 of each other swap places freely.
+  - **This is a much larger, more diverse confirmation of the synthesis-noise
+    ceiling than anything we'd gathered before**: adds 3 entirely new model
+    families beyond what Georgy's table showed (factorization machines in 3
+    flavors, plus 4 distinct tabular/neural architectures — GRN, GANDALF, LNN,
+    ResNet) — 13 model families total across this thread plus Georgy's table, all
+    still landing in the same ~0.946-0.951 band.
+- **One new, mildly interesting data point**: `XGB_OvR` (XGBoost trained as
+  one-vs-rest binary classifiers rather than native multiclass softmax) scored the
+  *highest* of all 13 — CV 0.95036 / LB 0.95040 — modestly above the native-multiclass
+  XGBoost variants (0.94986-0.95010) and above every other family. This is a
+  genuinely different problem formulation from anything we've tried (we've only
+  used native multiclass objectives in LightGBM/CatBoost). The margin is still
+  small (~0.0003-0.0005 over the next-best entries, within the noise band this
+  thread itself describes) so it isn't strong evidence of a real, reproducible
+  edge — but it's the one lever in this whole investigation we haven't already
+  ruled out or tried ourselves.
+- **Working rule stated by the author**: "select and blend by CV, submit, and let
+  the Public LB be a spectator" — matches our own methodology exactly. We have
+  never tuned against the public LB in this project either; every LB submission
+  here has been a confirmatory spot-check of an already-CV-selected model, not a
+  tuning signal.
+
+### Actions Taken
+
+- Read the full thread via `kaggle competitions topic-messages ... -v` (CSV output,
+  more reliable for a thread with embedded HTML tables than the default table view).
+- Cross-checked the CV/LB gap sizes and ordering-preservation claims against our own
+  project's leaderboard.md history — consistent.
+
+### Resolution
+
+**resolved** — a much larger-sample (13 model families, 4 people total across this
+thread and Georgy's table) confirmation of the same synthesis-noise-ceiling
+conclusion our own Rung 3/4 experiments reached independently. No change to our
+pipeline or best model. The one item worth flagging for Phase 6+ is `XGB_OvR`
+(one-vs-rest XGBoost) as a formulation we haven't tried — see Follow-ups.
+
+### Follow-ups
+
+- **XGB_OvR (one-vs-rest) is the one genuinely untried lever surfaced here.** If
+  Rung 5+ work is pursued, this is a more concrete, testable idea than blend-weight
+  or threshold tuning (both already tried and negative) — training 3 binary
+  XGBoost/LightGBM/CatBoost classifiers (one per class) instead of native
+  multiclass, then combining their scores, is a different inductive bias than
+  anything in v0.1-v0.5. Expected upside is still small (~0.0003-0.0005 per this
+  thread's own numbers, within its stated noise band) — treat as a cheap thing to
+  try if squeeze work continues, not a promising unexplored gap.
+  - **Update**: investigated the actual notebook behind this score — see the
+    `masayakawamata/s6e7-xgb-ovr-cv-0-95036` entry below. The headline score is
+    *not* attributable to OvR itself.
+- Otherwise, this closes the Phase 6+ open question with a stronger "yes, ~0.949 is
+  genuinely close to the ceiling" — now backed by 13 independently-trained model
+  families rather than the 4-5 we had before.
+
+## masayakawamata/s6e7-xgb-ovr-cv-0-95036 (notebook behind 718258's top-scoring row)
+
+### Context
+
+- URL: https://www.kaggle.com/code/masayakawamata/s6e7-xgb-ovr-cv-0-95036?scriptVersionId=331681059
+- User asked whether we'd actually investigated the notebook behind the `XGB_OvR`
+  row in 718258's comparison table (CV 0.95036 / LB 0.95040, the highest of 13
+  model families) — we hadn't; only the discussion thread's summary table was
+  read. Pulled via `kaggle kernels pull masayakawamata/s6e7-xgb-ovr-cv-0-95036`
+  (CLI, not browser) to check the actual implementation before trusting the
+  headline number as evidence that OvR itself is a good lever.
+- Directly relevant: our own `v0.6-xgboost-ovr.ipynb` also builds an XGBoost OvR
+  variant, using per-class `scale_pos_weight` and getting a flat tie with
+  CatBoost-V1 (0.9493 solo, +0.0001 nested-validated blend improvement, below our
+  submit threshold).
+
+### Investigation Checklist
+
+- [x] Pull and read the full notebook via the `kaggle` CLI.
+- [x] Determine whether the 0.95036 score is attributable to the OvR structure
+      itself, or to some other lever applied alongside it.
+- [x] Check whether the notebook's own ablations touch anything our v0.6 did
+      differently (particularly `scale_pos_weight`, which we used).
+- [x] Assess whether this changes how we should interpret our own v0.6 result.
+
+### Findings
+
+- **This notebook is explicitly written to test whether OvR itself helps — and
+  concludes it does not.** Title: "does per-class control actually help?" Direct
+  quote from the notebook's own section 10: **"The OvR decomposition itself — a
+  no-op vs. the multiclass flagship (+0.00003, corr 0.99982)."** The 0.95036 score
+  is not evidence that OvR is a good lever; it's the same score a native-multiclass
+  XGBoost gets under this author's setup.
+- **What actually produces ~0.95**: the same `argmax(proba / prior**beta)`
+  decision rule as Georgy Mamarin's notebook above (β tuned via OOF grid search,
+  `BETA_GRID = [0.0, 0.5, 0.75, 1.0, 1.15, 1.3, 1.5, 1.75, 2.0, 2.5]`), applied
+  identically across this author's *entire* notebook series (multiclass and OvR
+  alike) — "already the dominant lever on this competition (raw ~0.878 -> ~0.950,
+  a +0.071 jump)," per the notebook's own section 5. A second, smaller lever
+  (`numdirect` — target-encoding the 7 numeric features in addition to
+  categoricals) is the one thing from their campaign that "survived"; it is
+  unrelated to OvR structure.
+- **Per-class `scale_pos_weight` is confirmed harmful — a third independent
+  source now.** From the notebook's ~20-arm ablation campaign (section 10):
+  **"Per-class `scale_pos_weight` (balanced / sqrt / minorities-only) — all
+  negative (−0.0008 to −0.0015): moving the imbalance correction into training is
+  a *substitute* for β, not a complement, and it distorts the calibrated
+  probabilities β relies on — the exact same failure mode as the
+  `class_weight`-as-β-substitute null already on file for LightGBM/RepLeafGBM/FM."**
+  This is the same double-correction pitfall Georgy Mamarin's notebook documented
+  (`docs/investigate/2026-07-03-kaggle-discussion-findings.md`'s first entry) and
+  our own v0.4 threshold-tuning experiment ran into — now confirmed a third time,
+  independently, specifically for the OvR structure.
+  - **Directly relevant to our own v0.6**: our XGB-OvR notebook used per-class
+    `scale_pos_weight` (XGBoost's imbalance-correction knob) *and* plain argmax (no
+    post-hoc prior/β correction). Per this finding, that's a reasonable, honest
+    single-correction setup (not double-stacked) — but it also means our result
+    can't cleanly separate "does OvR help" from "does this specific correction
+    choice help," since we didn't run an uncorrected/differently-corrected variant
+    ourselves. Our flat tie with CatBoost-V1 (which uses a different single
+    correction, `auto_class_weights='Balanced'`) is consistent with this
+    notebook's "OvR is a no-op vs. multiclass" finding either way.
+- **Every other per-class lever tested was also a dead end**, per the same
+  section: per-class hyperparameters (deeper/slower minority binaries) — flat;
+  rank/PR early-stopping (`auc`/`aucpr` instead of `logloss`) — negative;
+  class-specific binary target encoding (vs. one shared encoder) — a "structural
+  null" (+0.00001); softmax-of-logits combination instead of normalized sigmoids —
+  negative. All screened via ~20-arm campaign, paired `StratifiedKFold(5, seed=0)`,
+  Stage-1 70k-row reject/rank -> Stage-2 full 690k-row confirm — a substantially
+  more rigorous ablation than our single-run v0.6.
+- **The notebook's own explicit recommendation** (section 11): "before reaching
+  for a structurally different decomposition (OvR, per-class thresholds, per-class
+  models), check whether your existing scalar decision rule has already absorbed
+  the control you think you're missing. On this competition, it had." Also notes
+  this OvR variant's OOF is a near-duplicate of a companion "Diversity Pack"
+  ensemble member (corr 0.99982) — it doesn't add independent signal even as an
+  ensemble component, for the same reason our own v0.5 found CatBoost-V1/V2/LightGBM
+  all too correlated to help each other.
+- **Where OvR genuinely would help** (per the notebook, none applicable here): a
+  metric that isn't a symmetric function of one scalar decision rule (e.g.
+  per-class thresholds under a cost-weighted objective where independent
+  thresholds aren't redundant with one β); genuinely heterogeneous per-class
+  feature sets; or as raw material for a stacker learning to recombine per-class
+  scores in ways a shared softmax can't.
+
+### Actions Taken
+
+- Pulled the notebook via `kaggle kernels pull` (CLI).
+- Read all 22 cells in full, focusing on the configuration (section 3), the model
+  wrapper code (section 7, `OvRXGB`/`MasaTEXGB` classes), and the ablation
+  campaign results (section 10).
+- Cross-checked the `scale_pos_weight`-is-harmful finding against our own v0.6
+  notebook's config and Georgy Mamarin's earlier double-correction finding.
+
+### Resolution
+
+**resolved** — the headline "0.95036, highest of 13 model families" framing from
+718258's summary table is misleading in isolation: the author's own rigorous
+ablation attributes essentially none of that score to the OvR structure itself.
+Our own v0.6 result (a flat tie with CatBoost-V1, no real blend gain) is
+consistent with and independently corroborated by this much more thorough
+campaign, not contradicted by it. No changes needed to our own v0.6 conclusions or
+pipeline.
+
+### Follow-ups
+
+- **Verify a claim before treating a leaderboard-style summary table as evidence
+  for what to try next** — this is the concrete lesson here: 718258's table
+  correctly reported the *number*, but reading only the table (not the underlying
+  notebook) would have led us to over-credit OvR as a promising untried lever, when
+  the notebook's own author had already run a ~20-arm campaign concluding the
+  opposite.
+- No further action planned on OvR for this competition — three independent
+  sources (Georgy Mamarin, this notebook's campaign, our own v0.4/v0.6) now agree
+  that stacking a training-time imbalance correction with a separate decision-rule
+  correction is the recurring failure mode behind these small/flat squeeze results,
+  not a missing modeling technique.
