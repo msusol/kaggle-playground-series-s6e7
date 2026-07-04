@@ -83,7 +83,7 @@
       even the architecturally-distinct logistic regression adds nothing, arguing
       against "wrong model family" as the cause of the ~0.949-0.951 plateau
 
-## Phase 6+ - Further ideas
+## Phase 6+ - Further ideas (implementation-plan.md's Rung 5)
 - [x] Consider: does the depth-4 rule from discussion 717222 suggest any concrete
       feature-engineering angle we haven't tried, or is ~0.949 genuinely close to
       the ceiling regardless of approach? — **answered**: investigated discussion
@@ -93,7 +93,7 @@
       with a much larger sample than before. See
       `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
 
-## Phase 7 - XGBoost one-vs-rest (v0.6) — done, flat result (per our threshold), highest LB submission
+## Phase 7 - XGBoost one-vs-rest (v0.6, implementation-plan.md's Rung 6) — done, flat result (per our threshold), highest LB submission
 - [x] Notebook built (`notebooks/v0.6-xgboost-ovr.ipynb`): 3 binary XGBoost
       classifiers per fold (one per class, `scale_pos_weight` for imbalance,
       native categorical via `enable_categorical=True`), combined via argmax;
@@ -137,3 +137,46 @@
       the double-correction pitfall. Corroborates rather than contradicts our own
       flat result. Full details in
       `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+
+## Phase 8 - HistGradientBoosting + exact-value target encoding (v0.7, implementation-plan.md's Rung 7) — done, POSITIVE result, new best model
+- [x] Investigated `redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026`
+      ("TE-HGBC") — its "weights" turned out to be training-time `sample_weight`
+      balancing, not a post-hoc per-class prediction reweighting (a 4th
+      independent confirmation of the single-correction finding); the genuinely
+      new techniques were exact-value target encoding of numeric features via
+      sklearn's native `TargetEncoder`, and `HistGradientBoostingClassifier`
+      (sklearn's native GBM, a 4th distinct tree-boosting library in this
+      project). Full details in
+      `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+- [x] Notebook built (`notebooks/v0.7-hgbc-te.ipynb`): target-encodes all 13 raw
+      features (including exact-value numerics) via `TargetEncoder(cv=5,
+      target_type='multiclass')` per fold, feeds into
+      `HistGradientBoostingClassifier` with native `class_weight='balanced'` and
+      native categorical handling; reproduces CatBoost-V1 alongside for a blend
+      check + nested validation. Built with Kaggle-input-first data loading from
+      the start, since this one runs on Kaggle's own compute rather than locally.
+- [x] Smoke-tested full pipeline on a data sample before running — all checks
+      passed; encouraging early signal (HGBC-TE solo 0.9428 vs. CatBoost-V1's
+      0.9422 at reduced scale/budget — the first new model to edge out CatBoost
+      solo, though not conclusive at this scale)
+- [x] Pushed and run on Kaggle publicly (~86 min total; HGBC-TE itself finished
+      in ~4.5 min, CatBoost-V1 reproduction peg took the bulk of the time,
+      consistent with earlier CatBoost runs on Kaggle in this project)
+- [x] **HGBC-TE solo OOF 0.9502 — beats CatBoost-V1 (0.9493) by +0.0009, the
+      first genuine non-noise-level improvement across the whole squeeze phase**
+      (Rungs 3-6 were all within ±0.0005 of CatBoost-V1). CatBoost-V1
+      reproduction PASS (exact match).
+- [x] Blend check: nested-validated blend with CatBoost-V1 adds only +0.0002
+      over solo — below threshold, not worth the complexity. Decision logic
+      correctly submitted the solo HGBC-TE predictions instead.
+- [x] Submitted to Kaggle: **public LB 0.95036** (submission 54321699) vs. OOF
+      0.9502 — tight correlation, no haircut. **New best LB in this project**,
+      beating the previous best (v0.6's noise-level curiosity submission,
+      0.94937) by +0.00099, and this one actually clears our honest-improvement
+      threshold.
+- [x] Recorded in leaderboard.md, implementation-plan.md (Rung 7) — revises the
+      "synthesis-noise ceiling" conclusion from Rungs 3-6: the ceiling wasn't at
+      ~0.949 after all, a different feature representation (exact-value numeric
+      target encoding) found real signal the other levers missed
+- [x] **v0.7 (HGBC-TE) is now the best model — v0.3 CatBoost no longer holds
+      that spot.**

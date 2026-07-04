@@ -13,6 +13,7 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 | v0.4 | CatBoost (v0.3-V2) + weighted-argmax | reproduces v0.3-V2, tunes per-class argmax weights | 0.9491 (nested: -0.0001 vs. plain argmax) | not submitted | `notebooks/v0.4-threshold-tuning.ipynb`; **negative result** — plain argmax already optimal, double-correction pitfall (see run log) |
 | v0.5 | 4-way blend: LightGBM + CatBoost-V1 + CatBoost-V2 + LogReg | reproduces v0.1/v0.3's exact configs + new LogReg baseline, nested-validated blend weight search | 0.9493 (nested blend: -0.0002 vs. solo CatBoost-V1) | not submitted | `notebooks/v0.5-ensemble.ipynb`; **negative result** — best blend degenerates to 100% CatBoost-V1, no diversity gain from any member |
 | v0.6 | XGBoost one-vs-rest (engineered feats) + CatBoost-V1/V2 | 3 binary XGB classifiers, `scale_pos_weight`, combined via argmax; blended with reproduced CatBoost-V1/V2 | 0.9493 solo (nested 3-way blend: +0.0001 vs. solo) | **0.94937** (2-way `xgb_ovr+catboost_v1` blend, weights 0.46/0.54) | `notebooks/v0.6-xgboost-ovr.ipynb`; **flat/negative per our own threshold** (honest improvement below 0.0005), but the curiosity-submission is the **highest LB score in this project so far** — see run log for the important caveat |
+| v0.7 | HistGradientBoostingClassifier + exact-value target encoding | all 13 raw features (incl. numerics at exact value) target-encoded via sklearn's native `TargetEncoder(cv=5)`; `class_weight='balanced'`, native categorical handling | **0.9502** (nested vs. solo CatBoost-V1: +0.0009) | **0.95036** | `notebooks/v0.7-hgbc-te.ipynb`; **POSITIVE result — new best model**, first genuine non-noise-level improvement in the squeeze phase (all of Rung 3-6 were within ±0.0005 of CatBoost-V1). Blend with CatBoost-V1 adds only +0.0002 more (not worth the complexity); HGBC-TE solo submitted directly |
 
 ## Run log
 
@@ -230,3 +231,52 @@ Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 - **v0.3 (either variant) remains the best model with a stable, credible
   0.9493-0.9491 OOF backing it.** The v0.6 blend's marginally higher LB number
   should not be treated as a confirmed improvement given everything above.
+
+### 2026-07-04 — v0.7 HistGradientBoosting + exact-value target encoding (Rung 7) — POSITIVE result, new best model
+- Surfaced by investigating `redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026`
+  ("TE-HGBC") — see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+  Two genuinely new ingredients tested: exact-value target encoding of the 7
+  numeric features (not just categoricals, cast to string and target-encoded via
+  sklearn's native `TargetEncoder(cv=5, target_type='multiclass')`), and
+  `HistGradientBoostingClassifier` (sklearn's native GBM, a 4th distinct
+  tree-boosting implementation in this project) with native `class_weight='balanced'`.
+  Reused the source notebook's tuned hyperparameters as-is; used our own
+  established 5-fold split; no post-hoc prior/threshold correction (plain argmax).
+- Run on Kaggle's own compute (not local), per user request — required a one-time
+  environment setup (`xgboost` was added to the project in v0.6; this run needed
+  no new dependency, `HistGradientBoostingClassifier`/`TargetEncoder` are both
+  core sklearn). Took ~86 minutes total on Kaggle's shared CPU (HGBC-TE itself
+  finished in ~4.5 min; the CatBoost-V1 reproduction peg took the bulk of the
+  time, consistent with earlier CatBoost runs on Kaggle in this project).
+- **HGBC-TE solo OOF: 0.9502** — matches the source notebook's own reported CV
+  (0.95026) closely despite a different fold split, and **beats CatBoost-V1
+  (0.9493) by +0.0009 — the first genuine, non-noise-level improvement in the
+  entire squeeze phase** (Rung 3-6 were all within ±0.0005 of CatBoost-V1, i.e.
+  indistinguishable from noise). Per-class recall: at-risk 0.9373, fit 0.9500,
+  unhealthy 0.9633 (vs. CatBoost-V1's at-risk 0.933 / fit 0.950 / unhealthy 0.965
+  — very similar profile, slightly better balanced across all three classes).
+- **CatBoost-V1 reproduction PASS** (exact match, `best_iterations [428, 950,
+  605, 339, 779]`, OOF 0.9493) — confirms the OOF probability matrix used for the
+  blend check is trustworthy.
+- **Blend check**: full-OOF 2-way grid search best 0.9504 at weights
+  (hgbc_te=0.78, catboost_v1=0.22) — only +0.0002 over HGBC-TE solo. **Nested
+  validation**: nested solo (hgbc_te) 0.9502 (+/- 0.0012), nested blend 0.9503
+  (+/- 0.0011) — honest improvement **+0.0002**, below the 0.0005 threshold for
+  the *blend* specifically. But HGBC-TE's *solo* score independently clears
+  `current best + 0.0005` on its own merits, so the notebook's decision logic
+  correctly submitted the **solo** HGBC-TE predictions, not the blend (the small
+  blend gain doesn't justify the added complexity of maintaining two models).
+- **Submitted to Kaggle** (submission 54321699): **public LB 0.95036** vs. OOF
+  0.9502 — tight correlation, no haircut, consistent with this project's
+  established CV-LB trustworthiness. **New best LB score, beating the previous
+  best (v0.6's curiosity submission at 0.94937) by +0.00099** — and unlike that
+  submission, this one clears our own honest-improvement threshold, so it's a
+  confirmed new best, not a noise-level curiosity.
+- **v0.7 (HGBC-TE) is now the best model in this project — v0.3 CatBoost no
+  longer holds that spot.** This also meaningfully updates the "synthesis-noise
+  ceiling" narrative from Rung 3-6: the ceiling wasn't at ~0.949 after all — a
+  sufficiently different feature representation (exact-value numeric target
+  encoding) found real additional signal that class-weighting, ensembling, OvR
+  decomposition, and threshold tuning had all missed. Worth revisiting whether
+  applying the same exact-value target encoding to CatBoost (rather than only to
+  a new model family) could push further, as a follow-up.

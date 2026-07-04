@@ -611,3 +611,86 @@ pipeline.
   that stacking a training-time imbalance correction with a separate decision-rule
   correction is the recurring failure mode behind these small/flat squeeze results,
   not a missing modeling technique.
+
+## redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026 ("TE-HGBC")
+
+### Context
+
+- URL: https://www.kaggle.com/code/redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026
+- User asked to investigate this notebook specifically looking for how it might
+  change the weights of predictions per class (a per-class post-hoc reweighting
+  technique, in the spirit of the `argmax(proba/prior^beta)` pattern already
+  documented above). Pulled via `kaggle kernels pull` (CLI, not browser).
+
+### Investigation Checklist
+
+- [x] Pull and read the full notebook via the `kaggle` CLI.
+- [x] Identify the exact mechanism behind any "weights" in the code.
+- [x] Determine whether it performs a post-hoc per-class prediction reweighting,
+      or something else.
+- [x] Note any other genuinely new techniques worth flagging separately.
+
+### Findings
+
+- **This notebook does NOT reweight predictions per class.** Its final decision
+  step is plain `np.argmax(test_preds, axis=1)` — no post-hoc prior/β correction,
+  no per-class threshold. The "weights" in the code (`balanced_weights(yy)`) are a
+  **training-time `sample_weight`**, not a prediction-time correction:
+  ```python
+  def balanced_weights(yy):
+      counts = np.bincount(yy, minlength=3)
+      return (len(yy) / (3 * counts))[yy]
+  ...
+  model.fit(A_tr, y[tr], sample_weight=balanced_weights(y[tr]))
+  ```
+  This is the standard sklearn-style "balanced" formula
+  (`n_samples / (n_classes * class_count)`) applied as a per-row weight during
+  training — functionally the same correction as CatBoost's
+  `auto_class_weights='Balanced'` or LightGBM's `class_weight='balanced'`, which
+  we already use. It is a **single correction with nothing stacked on top**,
+  consistent with the "pick one correction, don't stack" finding already
+  documented above (Georgy Mamarin's notebook, Kawamata's `XGB_OvR` ablation, our
+  own v0.4). This notebook is a fourth independent data point for the same
+  conclusion, this time from the training-time-only side rather than the
+  post-hoc-only side: a single correction (whichever kind) reaches ~0.950; there's
+  no post-hoc per-class weight adjustment happening here to learn from.
+- **Two genuinely new techniques, unrelated to the "weights" question, worth
+  flagging separately:**
+  1. **Exact-value target encoding of the numeric features.** All 13 columns
+     (including the 7 numerics) are target-encoded via sklearn's native
+     `TargetEncoder(cv=5)` (built-in cross-fit leakage protection), with numerics
+     treated as exact-value categories rather than binned. Stated rationale: with
+     690k rows, each distinct numeric value repeats hundreds of times, so
+     per-value label rates directly estimate the generator's probability — signal
+     that `HistGradientBoostingClassifier`'s ≤255 histogram bins can't fully
+     resolve on their own since neighboring values get merged. This is different
+     from our own engineered feature set, which only target-encodes specific
+     categorical/cross columns, never raw numerics at exact-value granularity.
+  2. **`HistGradientBoostingClassifier`** (sklearn's native GBM) — a fourth
+     distinct tree-boosting implementation beyond LightGBM/CatBoost/XGBoost in
+     this investigation, plus multi-seed averaging (`FOLD_SEEDS = [42, 2026, 7]`,
+     3 seeds × 5 folds = 15 total fits) for additional stability.
+  3. Scored CV 0.95026 / LB 0.95034 — competitive with, and statistically
+     indistinguishable from, the other top scores already documented (Kawamata's
+     `XGB_OvR` at 0.95036/0.95040). Another data point in the same tight
+     ~0.946-0.951 band regardless of approach.
+
+### Actions Taken
+
+- Pulled the notebook via `kaggle kernels pull` (CLI).
+- Read all 13 cells, focusing on the `CONFIG`/`balanced_weights` cell and the
+  training-loop cell to find the exact mechanism.
+
+### Resolution
+
+**resolved** — directly answered the user's question: no post-hoc per-class
+prediction reweighting exists in this notebook to learn from; its "weights" are a
+training-time sample-weight balance, single-corrected the same way our own
+CatBoost models already are. The exact-value numeric target encoding and
+`HistGradientBoostingClassifier` are noted as separate, unrelated techniques for
+awareness, not because they answer the original question.
+
+### Follow-ups
+
+- No action planned. This continues to corroborate the "single correction only"
+  finding rather than surface a new lever for our own pipeline.

@@ -575,3 +575,106 @@ plateau. v0.3 (either variant) remains the best model.
   that it recovered on its own; the root cause (what filled the disk) was not
   identified. Worth a closer look if it recurs, since a silently-stalled kernel with
   no error output is easy to miss.
+
+## v0.7-hgbc-te
+
+### Context
+
+- Notebook: `notebooks/v0.7-hgbc-te.ipynb`.
+- Purpose: Rung 7 — test whether `HistGradientBoostingClassifier` (sklearn's
+  native GBM, a 4th distinct tree-boosting implementation beyond
+  LightGBM/CatBoost/XGBoost) plus exact-value target encoding of numeric
+  features beats CatBoost-V1 (current best, OOF 0.9493). Surfaced by
+  investigating `redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026`
+  ("TE-HGBC") — see `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+- Run venue: **Kaggle**, not local JupyterLab, per user request — built with
+  Kaggle-input-first data loading from the start, pushed publicly, ran on
+  Kaggle's own shared CPU compute.
+
+### Investigation Checklist
+
+- [x] Smoke-test the pipeline locally on a data sample before pushing to Kaggle.
+- [x] Push and run on Kaggle.
+- [x] Monitor via both `kaggle kernels status` (CLI) and the Kaggle web log
+      viewer (CLI returns nothing for an in-progress kernel; the web UI streams
+      live logs).
+- [x] Extract HGBC-TE solo OOF, CatBoost-V1 reproduction check, blend/nested
+      validation results, and the final decision once complete.
+- [x] Submit the resulting `submission.csv` if the notebook's own decision logic
+      wrote one.
+
+### Findings
+
+- **Smoke test** (reduced scale/budget): HGBC-TE solo 0.9428 vs. CatBoost-V1's
+  0.9422 — the first new model to edge out CatBoost solo at reduced scale,
+  though not conclusive there.
+- **Full run took ~86 minutes on Kaggle's shared CPU** (5144.5s per the
+  platform's own reported runtime). HGBC-TE itself finished quickly (~4.5 min,
+  270.3s per the log) — the CatBoost-V1 reproduction peg took the bulk of the
+  time, consistent with how long CatBoost training took on Kaggle for earlier
+  notebooks in this project (v0.3/v0.4 also took unusually long there).
+- **HGBC-TE solo OOF: 0.9502** — closely matches the source notebook's own
+  reported CV (0.95026) despite using a different fold split, and **beats
+  CatBoost-V1 (0.9493) by +0.0009 — the first genuine, non-noise-level
+  improvement across the entire squeeze phase** (Rungs 3-6 were all within
+  ±0.0005 of CatBoost-V1, i.e. statistically indistinguishable from it).
+  Per-class recall: at-risk 0.9373, fit 0.9500, unhealthy 0.9633.
+- **CatBoost-V1 reproduction: PASS** (exact match, `best_iterations [428, 950,
+  605, 339, 779]`, OOF 0.9493) — confirms the blend comparison is trustworthy.
+- **Blend check**: full-OOF 2-way grid search best 0.9504 at weights
+  (hgbc_te=0.78, catboost_v1=0.22) — only +0.0002 over HGBC-TE solo same-data.
+  **Nested validation**: nested solo (hgbc_te) 0.9502 (+/- 0.0012), nested blend
+  0.9503 (+/- 0.0011) — honest improvement **+0.0002** for the blend
+  specifically, below the 0.0005 threshold. But HGBC-TE's solo score
+  independently clears `current_best + 0.0005` on its own, so the notebook's
+  decision logic correctly wrote a submission from the **solo** HGBC-TE
+  predictions rather than the (marginally better but not worth the added
+  complexity) blend.
+- **Submitted to Kaggle: public LB 0.95036** vs. OOF 0.9502 — tight correlation,
+  no haircut, consistent with this project's established CV-LB trustworthiness.
+  New best LB in this project.
+- **Monitoring note**: the Kaggle CLI's `kernels output` command returns nothing
+  for an in-progress kernel (confirmed repeatedly — same limitation hit with
+  earlier long-running kernels in this project). The Kaggle web UI's Logs tab,
+  by contrast, streams live output and was essential for confirming genuine
+  progress (vs. a stall) during the long CatBoost-V1 wait, and for reading the
+  final results the moment the run completed.
+
+### Actions Taken
+
+- Smoke-tested the full pipeline on a 15k/8k-row data sample before pushing.
+- Pushed to Kaggle publicly via `kaggle kernels push` with a dedicated
+  `kernel-metadata.json` (`enable_gpu: false` — both `HistGradientBoostingClassifier`
+  and `TargetEncoder` are CPU-only, no benefit from GPU).
+- Monitored via periodic `kaggle kernels status` checks plus the Kaggle web log
+  viewer (loaded Chrome browser tools mid-session specifically for this) once
+  the CLI's lack of in-progress output became a limiter.
+- Downloaded the completed kernel's output (`kaggle kernels output`), verified
+  `submission.csv`, and submitted it via `kaggle competitions submit`.
+- Recorded the positive result in `leaderboard.md` and `implementation-plan.md`
+  (Rung 7 marked done, revising the Rung 3-6 "synthesis-noise ceiling"
+  conclusion), and `TODO.md`.
+
+### Resolution
+
+**resolved** — a genuine positive result, the first of this project's entire
+squeeze phase (Rungs 3-6 were all flat/negative or within noise). v0.7 (HGBC-TE)
+is now the best model, superseding v0.3 CatBoost.
+
+### Follow-ups
+
+- **Revisit the "synthesis-noise ceiling" framing from Rungs 3-6**: it wasn't
+  really a ceiling at ~0.949 — it was specific to the feature representations
+  and model structures tried up to that point. Exact-value numeric target
+  encoding found real additional signal. The generalizable lesson: when several
+  different *decision-rule* and *model-structure* levers all plateau at the same
+  score, that's evidence the *feature representation* is the binding constraint,
+  not necessarily the data's intrinsic noise floor.
+- **Consider applying exact-value target encoding to CatBoost** (our previously
+  best-performing library) rather than only pairing it with a new model family —
+  worth testing whether the encoding itself, or the HGBC/encoding combination
+  specifically, is what drives the improvement.
+- No `notebook-runs.md` entry exists for v0.6-xgboost-ovr — it was covered in
+  `leaderboard.md` and `TODO.md` but this file's per-notebook convention was
+  missed for that one. Not backfilled here to stay in scope; worth doing if a
+  future session revisits v0.6.

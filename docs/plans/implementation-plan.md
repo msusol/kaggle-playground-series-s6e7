@@ -155,6 +155,85 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   further squeeze attempts should be weighed against this before investing more
   effort chasing marginal gains on this dataset.
 
+## Rung 5 - External research — DONE, confirms the ceiling with a larger sample
+- Investigated Kaggle discussion 718258 (Masaya Kawamata): a CV-vs-Public-LB
+  comparison across **13 independently-trained model families** (XGBoost variants,
+  RepLeafGBM, 3 factorization-machine flavors, and 4 tabular/neural architectures —
+  GRN, GANDALF, LNN, ResNet), all landing in the same ~0.946-0.951 band with CV/LB
+  gaps within ±0.0011. A much larger, more diverse confirmation of the
+  synthesis-noise ceiling than our own Rung 3/4 experiments alone.
+- Pulled and read the actual notebooks behind two headline scores in that
+  comparison (rather than trusting the summary table): `georgymamarin`'s
+  prior-correction writeup and `masayakawamata`'s `XGB_OvR` notebook. Both
+  independently confirm the double-correction pitfall (stacking training-time
+  class weighting with a separate post-hoc decision-rule correction hurts) already
+  found in Rung 3 — now a well-corroborated, cross-notebook finding, not an
+  isolated result of our own.
+- Full details in `docs/investigate/2026-07-03-kaggle-discussion-findings.md`.
+
+## Rung 6 - XGBoost one-vs-rest — DONE, flat result, corroborated by external research (`notebooks/v0.6-xgboost-ovr.ipynb`)
+- Surfaced by Rung 5's research: `XGB_OvR` scored highest of the 13 model families
+  (CV 0.95036). Built our own version — 3 independent binary XGBoost classifiers
+  (one per class, `scale_pos_weight` for imbalance, native categorical handling),
+  combined via argmax, blended with reproduced CatBoost-V1 (base features) and
+  CatBoost-V2 (engineered features, added after a scoping gap was caught: XGB-OvR
+  uses engineered features, so CatBoost-V1 alone was an apples-to-oranges peg).
+- **Solo XGB-OvR: 0.9493 — an exact tie with CatBoost-V1.** Full-OOF 3-way blend
+  best: 0.9495 (well within noise). **Nested-validated honest improvement: +0.0001**
+  — the first-ever positive nested blend result in this project, but far below the
+  0.0005 submit threshold. No candidate submission written.
+- Submitted the best pairwise blend (`xgb_ovr+catboost_v1`, 0.9495 same-data OOF)
+  anyway out of curiosity, despite not clearing the threshold: **public LB
+  0.94937** — the highest LB score in this project, but explicitly treated as
+  statistically tied with v0.3 (same conclusion as v0.3-V1 vs. V2), not a confirmed
+  new best model, given it sits inside the same noise band as every other
+  Rung 3-6 result.
+- **Why the flat result is expected, not a shortfall**: pulled the actual notebook
+  behind Rung 5's `XGB_OvR` headline score. Its author ran a ~20-arm ablation
+  campaign and concluded **"the OvR decomposition itself — a no-op vs. the
+  multiclass flagship"** — the 0.95036 score comes from the same prior-correction
+  decision rule applied across their whole notebook series, not from OvR
+  structure. The same campaign also found per-class `scale_pos_weight` (which our
+  own XGB-OvR used) actively harmful when stacked with a separate correction — a
+  third independent confirmation of Rung 3's double-correction pitfall.
+- **v0.3 (either variant) remains the best model with a stable, credible OOF
+  behind it.** Four independent squeeze attempts (Rung 3, Rung 4, Rung 5, Rung 6)
+  now all point at the same synthesis-noise ceiling.
+
+## Rung 7 - HistGradientBoosting + exact-value target encoding — DONE, POSITIVE result, new best model (`notebooks/v0.7-hgbc-te.ipynb`)
+- Surfaced by investigating `redamountassir/ps-s6e7-hgbc-baseline-lb-0-95034-cv-0-95026`
+  ("TE-HGBC"). Two new ingredients: exact-value target encoding of the 7 numeric
+  features (cast to string, target-encoded via sklearn's native
+  `TargetEncoder(cv=5, target_type='multiclass')` — not just categoricals, unlike
+  every prior rung's feature engineering), and `HistGradientBoostingClassifier`
+  (sklearn's native GBM, a 4th distinct tree-boosting implementation) with native
+  `class_weight='balanced'`. Reused the source notebook's tuned hyperparameters;
+  our own 5-fold split; no post-hoc correction (plain argmax). Run on Kaggle's
+  own compute.
+- **HGBC-TE solo OOF: 0.9502 — beats CatBoost-V1 (0.9493) by +0.0009, the first
+  genuine non-noise-level improvement across the entire squeeze phase** (Rungs
+  3-6 were all within ±0.0005 of CatBoost-V1). CatBoost-V1 reproduction PASS
+  (exact match) confirmed the comparison is trustworthy.
+- **Blend check**: nested-validated blend with CatBoost-V1 adds only +0.0002 over
+  HGBC-TE solo — below threshold, not worth the added complexity. The decision
+  logic correctly submitted the **solo** HGBC-TE predictions.
+- **Submitted to Kaggle: public LB 0.95036** vs. OOF 0.9502 — tight correlation,
+  no haircut. **New best LB in this project**, beating the previous best
+  (v0.6's curiosity submission, 0.94937 — a noise-level result) by +0.00099, and
+  unlike that submission this one clears our own honest-improvement threshold.
+- **This revises the "synthesis-noise ceiling" conclusion from Rungs 3-6**: the
+  ceiling wasn't really at ~0.949 — a sufficiently different feature
+  representation (exact-value numeric target encoding, not binned/qcut'd) found
+  real additional signal that class-weighting, ensembling, one-vs-rest
+  decomposition, and threshold tuning had all missed. The lesson generalizes:
+  when several different *decision-rule* and *model-structure* levers all plateau
+  at the same score, that's evidence the *feature representation* is the binding
+  constraint, not necessarily the data's intrinsic noise floor.
+- **v0.7 (HGBC-TE) is now the best model — v0.3 CatBoost no longer holds that
+  spot.** Worth revisiting whether applying the same exact-value target encoding
+  to CatBoost (rather than only pairing it with a new model family) pushes
+  further, as a follow-up.
+
 ## Cross-validation
 - 5-fold **stratified** (by target) given the imbalance; trust CV->LB correlation.
 - Track balanced accuracy per class (not just the aggregate) in `leaderboard.md`

@@ -1,0 +1,15 @@
+{
+  "id": "gdataranger/s6e7-v01-lightgbm-baseline",
+  "title": "S6E7 | v0.1 LightGBM Baseline",
+  "code_file": "v0.1-baseline.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [
+    "playground-series-s6e7"
+  ],
+  "model_sources": []
+}

@@ -1,0 +1,15 @@
+{
+  "id": "gdataranger/s6e7-v04-threshold-tuning",
+  "title": "S6E7 | v0.4 Threshold Tuning",
+  "code_file": "v0.4-threshold-tuning.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [
+    "playground-series-s6e7"
+  ],
+  "model_sources": []
+}

@@ -1,0 +1,15 @@
+{
+  "id": "gdataranger/s6e7-v0-2-feature-engineering-final",
+  "title": "S6E7 Feature Engineering Notebook v2",
+  "code_file": "v0.2-feature-engineering.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": false,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [
+    "playground-series-s6e7"
+  ],
+  "model_sources": []
+}
