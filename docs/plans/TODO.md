@@ -180,3 +180,26 @@
       target encoding) found real signal the other levers missed
 - [x] **v0.7 (HGBC-TE) is now the best model — v0.3 CatBoost no longer holds
       that spot.**
+
+## Phase 9 - Publish all notebooks publicly on Kaggle — done
+- [x] Cleaned up notebooks v0.1-v0.6 for public release (removed internal
+      session/doc-path references, fixed local-only data paths to a
+      Kaggle-input-first pattern with local fallback, fixed v0.2's broken
+      kernelspec that caused a NoSuchKernel error on Kaggle)
+- [x] Pushed all 7 notebooks (v0.1-v0.7) publicly to Kaggle; all 7 executed
+      cleanly end-to-end and reproduced their recorded OOF/LB numbers exactly
+      (v0.2's LightGBM reproductions, v0.5's LightGBM/CatBoost-V1 reproductions,
+      v0.6/v0.7's CatBoost-V1 reproductions all PASSed). None of the three
+      republish runs (v0.2/v0.5/v0.6) were resubmitted to the competition —
+      they reproduce already-recorded scores, not new results.
+- [x] Diagnosed and fixed a Kaggle API 409 conflict blocking the v0.2/v0.5/v0.6
+      republishes: Kaggle derives the actual public slug from the notebook
+      **title**, not the `id` field in kernel-metadata.json — reusing a title
+      already claimed by an earlier (even failed/orphaned) push attempt causes
+      a genuine slug collision. Fixed by giving each a distinct, previously
+      unused title.
+- [x] Posted a [Kaggle discussion thread](https://www.kaggle.com/competitions/playground-series-s6e7/discussion/719199)
+      summarizing the full 7-notebook research trail (what each version tried,
+      OOF/LB table) and linking the GitHub repo (committed + pushed first so
+      the repo link reflects current state).
+- [x] Committed and pushed all of the above work to GitHub (commit 9c98d5d).

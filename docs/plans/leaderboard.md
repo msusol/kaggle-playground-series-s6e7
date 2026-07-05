@@ -2,6 +2,22 @@
 
 Update after **every** completed run + validation pass. OOF = out-of-fold CV.
 
+**All 7 notebooks (v0.1-v0.7) are published publicly on Kaggle** (2026-07-04), each
+executing cleanly end-to-end and reproducing the OOF/LB numbers below exactly. A
+[discussion thread](https://www.kaggle.com/competitions/playground-series-s6e7/discussion/719199)
+summarizing the full research trail links all 7 and the GitHub repo. Public kernels:
+[v0.1 EDA](https://www.kaggle.com/code/gdataranger/s6e7-v0-1-eda) /
+[v0.1 LightGBM baseline](https://www.kaggle.com/code/gdataranger/s6e7-v0-1-lightgbm-baseline) ·
+[v0.2 Feature engineering](https://www.kaggle.com/code/gdataranger/s6e7-feature-engineering-notebook-v2) ·
+[v0.3 CatBoost bake-off](https://www.kaggle.com/code/gdataranger/s6e7-v0-3-catboost-bake-off) ·
+[v0.4 Threshold tuning](https://www.kaggle.com/code/gdataranger/s6e7-v0-4-threshold-tuning) ·
+[v0.5 Ensemble](https://www.kaggle.com/code/gdataranger/s6e7-ensemble-rung-4) ·
+[v0.6 XGBoost One-vs-Rest](https://www.kaggle.com/code/gdataranger/s6e7-xgboost-one-vs-rest-rung-6) ·
+[v0.7 HistGradientBoosting + target encoding](https://www.kaggle.com/code/gdataranger/s6e7-v0-7-histgradientboosting-target-encoding).
+The public republish runs of v0.2/v0.5/v0.6 were not resubmitted to the competition
+(they reproduce already-recorded scores below, not new results) — no OOF/LB numbers
+below changed as a result of this publish.
+
 | Version | Model | Key change | OOF | Kaggle LB | Notes |
 |---|---|---|---|---|---|
 | floor | - | all-majority-class (`at-risk`) | 0.333 (analytic) | **0.33333** | must-beat; confirmed 2026-07-03 (submission 54310528) — exact match to the analytic floor |
