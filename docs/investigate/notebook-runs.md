@@ -807,3 +807,112 @@ model. No submission made (correctly, per the decision logic). v0.7
   for any future notebook that classifies columns by `dtype == object` —
   prefer `pd.api.types.is_numeric_dtype()`/`is_string_dtype()` checks instead,
   since they're robust across pandas versions.
+
+## v0.9-realmlp-hgbc-blend
+
+### Context
+
+- Notebook: `notebooks/v0.9-realmlp-hgbc-blend.ipynb`.
+- Purpose: Rung 9 — direct follow-up flagged in v0.8's own entry above. v0.8
+  only blended RealMLP against CatBoost-V1 (its comparison peg); this tests
+  RealMLP blended against v0.7's HGBC-TE (the actual current best model)
+  instead, since RealMLP found a genuinely non-degenerate blend weight
+  against CatBoost-V1 (unlike every prior blend attempt).
+- Run venue: Kaggle (GPU T4), pushed directly (not local — the local
+  JupyterLab server was down after a machine reboot). Both RealMLP and
+  HGBC-TE retrained fresh in this run (not reused from v0.7/v0.8's prior
+  results) so their OOF arrays share a single `StratifiedKFold(5,
+  random_state=42)` split and are directly comparable/blendable.
+- Per explicit user request, submits **unconditionally** — no 0.0005
+  real-improvement threshold gate this time (this run was framed as an
+  exploration/curiosity pass, not a gated experiment like v0.1-v0.8).
+
+### Investigation Checklist
+
+- [x] Build a combined notebook retraining RealMLP (from v0.8) and HGBC-TE
+      (from v0.7, exact config) with a shared fold split.
+- [x] Smoke-test before pushing to Kaggle.
+- [x] Push to Kaggle GPU, monitor to completion.
+- [x] Extract solo/blend/nested-validation results.
+- [x] Submit unconditionally and record the score.
+
+### Findings
+
+- **Smoke-test bug found and fixed**: reusing v0.7's original categorical-view
+  code (`pd.Categorical` over raw `train_model[col]` without any `.astype(str)`
+  conversion) crashed with `TypeError: '<' not supported between instances of
+  'str' and 'float'` when building the sorted category list — the raw
+  categorical columns have substantial real missingness (thousands of NaN
+  rows even in the full 690k dataset), and pandas 3.0.3's category-sorting
+  path chokes on a set containing both real NaN (float) and strings. This
+  same code worked fine when v0.7 was originally built, confirming the local
+  venv's pandas was silently upgraded (likely as a side effect of installing
+  `torch`/`optuna` for v0.8) past a version where this comparison succeeded.
+  Fixed by filtering NaN out of the category list before sorting (`categories
+  = sorted(x for x in (...) if pd.notna(x))`), preserving v0.7's original
+  intent of leaving NaN in the data for `HistGradientBoostingClassifier` to
+  route natively, without the sort-crash on the (unrelated) category-list
+  construction step.
+- **Full Kaggle run results**:
+  - **RealMLP solo OOF: 0.9506** (fresh retrain, close to v0.8's originally
+    recorded 0.95062 — small run-to-run variance expected).
+  - **HGBC-TE solo OOF: 0.9503** (fresh retrain, matches v0.7's recorded
+    0.9502 almost exactly).
+  - **Blend check**: full-OOF grid search best 0.9507 at weights
+    (realmlp=0.86, hgbc_te=0.14). **Nested validation**: nested solo
+    (realmlp) 0.9506 (+/- 0.0012), nested blend 0.9506 (+/- 0.0012) — honest
+    improvement **~+0.0000**, i.e. essentially no measurable value added by
+    blending in HGBC-TE, once cross-validation is done honestly. Nearly
+    identical pattern to v0.8's RealMLP+CatBoost-V1 blend result (+0.0001) —
+    two independent tree-boosting partners now both fail to add real
+    diversity to RealMLP.
+  - **Submitted unconditionally (per request): public LB 0.95065** — the
+    **highest public LB score in this project so far**, ahead of v0.8's
+    curiosity submission (0.95048) and v0.7's confirmed best (0.95036). Tight
+    OOF-LB correlation (blend OOF 0.9506 → LB 0.95065, no meaningful haircut).
+- **Important interpretive caveat**: despite being the highest LB number
+  observed, this is **not treated as a confirmed new best model** — the
+  nested-validated honest improvement is ~0, meaning the blend doesn't
+  meaningfully outperform RealMLP solo under honest cross-validation. The
+  higher LB number reflects RealMLP's own already-strong solo performance
+  carrying through this particular blend combination, not new information
+  extracted from the blend itself.
+
+### Actions Taken
+
+- Built `notebooks/v0.9-realmlp-hgbc-blend.ipynb` combining RealMLP's
+  architecture/training loop (from v0.8) and HGBC-TE's exact training code
+  (from v0.7) with a single shared fold split, plus an unconditional
+  (non-thresholded) decision/submission cell per explicit request.
+- Smoke-tested at reduced scale locally, found and fixed the pandas NaN/str
+  sorting bug above.
+- Pushed to Kaggle (GPU T4) publicly, monitored to completion (~37 min total
+  — RealMLP ~10 min, HGBC-TE ~5 min, blend/nested fast, plus queue/startup
+  overhead).
+- Downloaded the completed run's submission.csv and log via `kaggle kernels
+  output`, submitted via `kaggle competitions submit`, confirmed the score via
+  `kaggle competitions submissions -v`.
+- Recorded the result in `leaderboard.md`, `implementation-plan.md` (Rung 9),
+  and `TODO.md` (Phase 11).
+
+### Resolution
+
+**resolved** — new highest LB score in the project (0.95065), but explicitly
+**not** treated as a confirmed new best model given the ~0 nested-validated
+improvement over RealMLP solo. v0.7 (HGBC-TE) and v0.8 (RealMLP) remain
+statistically tied for best model; this run adds a data point confirming
+RealMLP hasn't yet found a real ensemble partner among the tree-boosting
+models tried.
+
+### Follow-ups
+
+- **RealMLP has now failed to find real ensemble lift with two different
+  tree-boosting partners** (CatBoost-V1 in v0.8, HGBC-TE in v0.9). If blend
+  work continues, the next candidate would need to be an even more
+  differently-biased model (not another GBDT variant) to have a real chance
+  at adding diversity — e.g. a linear/logistic model (already tried in v0.5
+  and found unhelpful there too, though not blended with RealMLP
+  specifically) or a genuinely different neural architecture.
+- Given two independent blend attempts have both landed at ~0 honest
+  improvement, further RealMLP-blend experiments are likely low-value unless
+  a structurally different partner model is tried.

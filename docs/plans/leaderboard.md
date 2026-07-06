@@ -31,6 +31,7 @@ below changed as a result of this publish.
 | v0.6 | XGBoost one-vs-rest (engineered feats) + CatBoost-V1/V2 | 3 binary XGB classifiers, `scale_pos_weight`, combined via argmax; blended with reproduced CatBoost-V1/V2 | 0.9493 solo (nested 3-way blend: +0.0001 vs. solo) | **0.94937** (2-way `xgb_ovr+catboost_v1` blend, weights 0.46/0.54) | `notebooks/v0.6-xgboost-ovr.ipynb`; **flat/negative per our own threshold** (honest improvement below 0.0005), but the curiosity-submission is the **highest LB score in this project so far** — see run log for the important caveat |
 | v0.7 | HistGradientBoostingClassifier + exact-value target encoding | all 13 raw features (incl. numerics at exact value) target-encoded via sklearn's native `TargetEncoder(cv=5)`; `class_weight='balanced'`, native categorical handling | **0.9502** (nested vs. solo CatBoost-V1: +0.0009) | **0.95036** | `notebooks/v0.7-hgbc-te.ipynb`; **POSITIVE result — new best model**, first genuine non-noise-level improvement in the squeeze phase (all of Rung 3-6 were within ±0.0005 of CatBoost-V1). Blend with CatBoost-V1 adds only +0.0002 more (not worth the complexity); HGBC-TE solo submitted directly |
 | v0.8 | RealMLP (neural net) + multi-resolution numeric target encoding | from-scratch PyTorch port of `yunsuxiaozi/pss6e7-realmlp-cv-0-95063`; periodic numeric embeddings, NTK-parametrized linears, 16-way ensemble-in-one-model, EMA; our own 5-fold split, single training-time class-weight correction only (no post-hoc reweighting); run locally (Apple M3 Pro, PyTorch MPS) | **0.95062 solo** (nested vs. current best: +0.0001, below threshold) | **0.95048** (curiosity submission, submission 54376269) | `notebooks/v0.8-realmlp.ipynb`; **flat result by our own strict threshold, but the highest raw solo OOF of any model in this project** — essentially a statistical tie with v0.7 (+0.0004 raw, nested-validated honest margin only +0.0001, short of the 0.0005 bar). First non-tree-boosting model family tried; blend with CatBoost-V1 only reaches 82/18 weighting (not degenerate to one member like v0.5), suggesting some real diversity, but not enough to clear threshold on its own. LB narrowly edges v0.7's LB (0.95036) by +0.00012 — within the same noise band documented throughout this project, not treated as a confirmed new best (same caveat as v0.6's curiosity submission) |
+| v0.9 | RealMLP + HGBC-TE (v0.7) 2-way blend | blends v0.8's RealMLP against v0.7's HGBC-TE directly (rather than CatBoost-V1, the v0.8 comparison peg); both retrained fresh on Kaggle GPU with a shared `StratifiedKFold(5)`; submitted unconditionally (no threshold gate) per explicit exploration request | RealMLP 0.9506, HGBC-TE 0.9503 solo; blend (86/14) 0.9507 same-data, **nested honest improvement ~+0.0000** | **0.95065** (submission 54379467) — **highest public LB in this project** | `notebooks/v0.9-realmlp-hgbc-blend.ipynb`; **highest LB score yet, but not a confirmed improvement** — nested validation shows essentially zero added value over RealMLP solo (same pattern as v0.8's RealMLP+CatBoost-V1 blend); the higher LB reflects RealMLP's own strong solo performance, not new diversity from this particular pairing |
 
 ## Run log
 
@@ -350,3 +351,48 @@ below changed as a result of this publish.
   ~20% of test; competing models have swapped rank by ±0.0005 or more between
   CV and LB elsewhere in this project). **Not treated as a confirmed new
   best** — same caveat applied to v0.6's curiosity submission previously.
+
+### 2026-07-05 — v0.9 RealMLP + HGBC-TE blend — highest LB yet, but not a confirmed improvement
+- Direct follow-up flagged in v0.8's own `notebook-runs.md` entry: v0.8 only
+  blended RealMLP against CatBoost-V1 (the comparison peg used there), never
+  against v0.7's HGBC-TE (our actual current best model). Given RealMLP found
+  a genuinely non-degenerate blend weight against CatBoost-V1 (82-92%, not
+  collapsing to one member like every earlier blend attempt), this tested
+  whether that diversity signal held up when paired with the real best model.
+- Both RealMLP and HGBC-TE retrained fresh (not reused from prior runs) on
+  Kaggle GPU (T4), sharing a single `StratifiedKFold(5, random_state=42)` so
+  their OOF arrays are directly comparable. No CatBoost-V1 needed this run —
+  kept the whole thing fast (~30 min total vs. v0.8's 80+ min, since
+  CatBoost's reproduction was the slow part every other time).
+- Per explicit request, **submitted unconditionally** — no 0.0005
+  real-improvement threshold gate this time; this run was itself framed as an
+  exploration/curiosity pass.
+- **Solo scores**: RealMLP 0.9506, HGBC-TE 0.9503 (closely matches v0.7's
+  known 0.9502). **Blend**: full-OOF grid search best 0.9507 at weights
+  (realmlp=0.86, hgbc_te=0.14). **Nested validation**: nested solo (realmlp)
+  0.9506 (+/- 0.0012), nested blend 0.9506 (+/- 0.0012) — honest improvement
+  **~+0.0000**, essentially identical to solo RealMLP. Same pattern as v0.8's
+  RealMLP+CatBoost-V1 blend (+0.0001) — pairing RealMLP with the *actual* best
+  model instead of the second-best one didn't unlock any additional diversity
+  either.
+- **Submitted anyway (unconditional): public LB 0.95065 — the highest public
+  LB score in this project so far**, edging out v0.8's curiosity submission
+  (0.95048) and v0.7's confirmed best (0.95036). Tight OOF-LB correlation
+  (blend OOF 0.9506 → LB 0.95065, no meaningful haircut).
+- **Important caveat**: despite being the highest LB number seen, this is
+  **not treated as a confirmed new best model** — the nested-validated honest
+  improvement is ~0, meaning this blend adds nothing measurable beyond
+  RealMLP solo once cross-validation is done honestly. The higher LB number
+  reflects RealMLP's own already-strong solo performance carrying through to
+  this particular blend combination, not new information from the blend
+  itself. Consistent with this project's broader finding that public LB
+  ordering among models within ~0.0005-0.001 of each other is not reliable
+  evidence of a real ranking.
+- **v0.7 (HGBC-TE) and v0.8 (RealMLP) remain statistically tied for best
+  model** — v0.9 doesn't change that conclusion, it just adds one more data
+  point in the same tight noise band (~0.9502-0.9507 across v0.7/v0.8/v0.9),
+  now with the added information that RealMLP+HGBC-TE blending specifically
+  doesn't unlock new diversity either (matching the RealMLP+CatBoost-V1
+  result). Two independent blend attempts with RealMLP now agree: it's a
+  strong solo model, but not a source of ensemble lift with either
+  tree-boosting model tried so far.

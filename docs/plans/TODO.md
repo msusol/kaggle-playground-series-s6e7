@@ -237,3 +237,23 @@ is superseded by its recorded results in `leaderboard.md`/`implementation-plan.m
       (Rung 8) regardless of the negative-by-threshold outcome.
 - [x] **v0.7 (HGBC-TE) remains the best model** -- v0.8 is the closest
       challenger yet and the first non-tree-boosting family to reach parity.
+
+## Phase 11 - RealMLP + HGBC-TE blend (v0.9, implementation-plan.md's Rung 9) — done, highest LB yet, not a confirmed improvement
+- [x] Built `notebooks/v0.9-realmlp-hgbc-blend.ipynb`: retrains RealMLP and
+      v0.7's HGBC-TE fresh (shared StratifiedKFold(5)), blends them directly
+      against each other (not via CatBoost-V1, v0.8's comparison peg). Run on
+      Kaggle GPU (T4), no CatBoost needed so much faster than v0.8 (~30 min).
+- [x] Fixed a pandas 3.0.3 NaN-vs-str sorting bug found during smoke testing
+      (same root cause as v0.8's dtype bug -- the local venv's pandas was
+      silently upgraded past a version where this code path worked).
+- [x] Submitted unconditionally (no threshold gate) per explicit request.
+- [x] Solo: RealMLP 0.9506, HGBC-TE 0.9503. Blend (86/14): 0.9507 same-data,
+      nested honest improvement ~+0.0000 -- essentially no added diversity,
+      same pattern as v0.8's RealMLP+CatBoost-V1 blend.
+- [x] **Public LB 0.95065 -- highest LB in this project** (submission
+      54379467), but not treated as a confirmed new best given the ~0 nested
+      improvement. Recorded in leaderboard.md/implementation-plan.md (Rung 9)
+      regardless.
+- [x] **v0.7/v0.8 remain statistically tied for best model** -- two
+      independent RealMLP blend attempts (vs. CatBoost-V1, vs. HGBC-TE) both
+      found no real ensemble lift.

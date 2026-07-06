@@ -1,0 +1,16 @@
+{
+  "id": "gdataranger/s6e7-v0-9-realmlp-hgbc-blend",
+  "title": "S6E7 RealMLP HGBC Blend Rung 9",
+  "code_file": "v0.9-realmlp-hgbc-blend.ipynb",
+  "language": "python",
+  "kernel_type": "notebook",
+  "is_private": false,
+  "enable_gpu": true,
+  "enable_internet": false,
+  "dataset_sources": [],
+  "competition_sources": [
+    "playground-series-s6e7"
+  ],
+  "model_sources": [],
+  "machine_shape": "NvidiaTeslaT4"
+}

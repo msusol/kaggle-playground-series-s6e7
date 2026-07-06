@@ -256,6 +256,25 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   reach parity — worth keeping as a candidate diversity source if blend work
   is revisited, even though it doesn't clear the bar solo.
 
+## Rung 9 - RealMLP + HGBC-TE blend — DONE, highest LB yet, but not a confirmed improvement (`notebooks/v0.9-realmlp-hgbc-blend.ipynb`)
+- Direct follow-up to Rung 8: tested RealMLP blended against v0.7's HGBC-TE
+  (the actual current best model) instead of CatBoost-V1 (Rung 8's comparison
+  peg), since RealMLP found a genuinely non-degenerate blend weight there.
+  Both models retrained fresh on Kaggle GPU, shared `StratifiedKFold(5)`.
+  Submitted unconditionally (no threshold gate) per explicit request.
+- **Solo: RealMLP 0.9506, HGBC-TE 0.9503** (matches v0.7 closely). **Blend**:
+  0.9507 at (realmlp=0.86, hgbc_te=0.14). **Nested honest improvement:
+  ~+0.0000** — essentially identical to solo RealMLP, same pattern as Rung 8's
+  RealMLP+CatBoost-V1 blend (+0.0001).
+- **Submitted anyway: public LB 0.95065 — highest LB in this project**, but
+  **not treated as a confirmed new best** given the ~0 nested improvement —
+  the higher number reflects RealMLP's own solo strength, not new diversity
+  from this blend.
+- **v0.7/v0.8 remain statistically tied for best model.** Two independent
+  blend attempts with RealMLP (vs. CatBoost-V1, vs. HGBC-TE) now agree:
+  RealMLP is a strong solo model but hasn't yet been a source of real ensemble
+  lift with either tree-boosting model tried.
+
 ## Cross-validation
 - 5-fold **stratified** (by target) given the imbalance; trust CV->LB correlation.
 - Track balanced accuracy per class (not just the aggregate) in `leaderboard.md`
