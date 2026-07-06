@@ -234,6 +234,28 @@ almost exactly (no leakage signal). Full findings in the notebook's summary cell
   to CatBoost (rather than only pairing it with a new model family) pushes
   further, as a follow-up.
 
+## Rung 8 - RealMLP (neural net) — DONE, flat result by our own threshold, but highest raw OOF (`notebooks/v0.8-realmlp.ipynb`)
+- Surfaced by investigating `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` (raw CV
+  0.95057, essentially tied with v0.7). First neural-net model family in this
+  project — from-scratch PyTorch port (periodic numeric embeddings, NTK-style
+  linears, 16-way ensemble-in-one-model, EMA), run locally on Apple M3 Pro
+  (PyTorch MPS), not Kaggle. Single training-time class-weight correction only;
+  the source's post-hoc Optuna reweighting was not reproduced (already found
+  negligible, +0.00006).
+- **RealMLP solo OOF: 0.95062 — the highest raw solo OOF of any model tried**,
+  edging out v0.7 (0.9502) by +0.0004. CatBoost-V1 reproduction PASS (0.9493).
+- **Blend**: 82/18 (realmlp/catboost_v1) weighting, not degenerate to one
+  member (unlike v0.5) — some genuine diversity between a neural net and a
+  GBDT. Nested-validated honest improvement over solo: only +0.0001.
+- **Decision: NO REAL IMPROVEMENT** — the +0.0004 raw margin over v0.7 falls
+  just short of the project's 0.0005 threshold. Essentially a statistical tie,
+  not a confirmed new best. No submission written or made to Kaggle.
+- **v0.7 (HGBC-TE) remains the best model.** This is the closest any
+  alternative has come to displacing it, and notably the first genuinely
+  different model family (not just a different tree-boosting library) to
+  reach parity — worth keeping as a candidate diversity source if blend work
+  is revisited, even though it doesn't clear the bar solo.
+
 ## Cross-validation
 - 5-fold **stratified** (by target) given the imbalance; trust CV->LB correlation.
 - Track balanced accuracy per class (not just the aggregate) in `leaderboard.md`

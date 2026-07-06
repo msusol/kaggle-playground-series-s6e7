@@ -203,3 +203,33 @@
       OOF/LB table) and linking the GitHub repo (committed + pushed first so
       the repo link reflects current state).
 - [x] Committed and pushed all of the above work to GitHub (commit 9c98d5d).
+
+## Phase 10 - RealMLP neural net (v0.8, implementation-plan.md's Rung 8) — done, flat result, highest raw OOF yet
+- [x] Investigated `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` — first neural-net
+      model family in this project, raw CV 0.95057, essentially tied with v0.7.
+      See `docs/investigate/2026-07-05-kaggle-discussion-findings.md`.
+- [x] Built `notebooks/v0.8-realmlp.ipynb`: from-scratch PyTorch RealMLP port
+      (periodic numeric embeddings, NTK-style linears, 16-way
+      ensemble-in-one-model, EMA), our own StratifiedKFold(5), single
+      training-time class-weight correction only (source's post-hoc Optuna
+      reweighting not reproduced -- already found negligible). Run locally
+      (Apple M3 Pro, PyTorch MPS backend), not Kaggle.
+- [x] Smoke-tested before the full run; found and fixed a real bug (pandas
+      3.0.3's `.astype(str)` produces native `str` dtype not `object`, broke
+      categorical/numeric column classification) and cleaned up tqdm progress
+      display (per-batch bar was too noisy; moved to fold+epoch bars with
+      loss/accuracy shown via postfix instead of interleaved prints).
+- [x] Monitored the user's live local run via periodic autosave file checks
+      (no CLI/API for a local Jupyter kernel's status) with SMS updates at
+      milestones.
+- [x] **RealMLP solo OOF: 0.95062 — highest raw OOF of any model in this
+      project**, +0.0004 over v0.7 (0.9502). CatBoost-V1 reproduction PASS.
+- [x] Blend (82/18 realmlp/catboost_v1) not degenerate to one member --
+      genuine diversity signal -- but nested-validated honest improvement
+      only +0.0001.
+- [x] **Decision: NO REAL IMPROVEMENT** -- +0.0004 raw margin over v0.7 falls
+      short of the 0.0005 threshold. No submission written, nothing submitted
+      to Kaggle. Recorded in leaderboard.md and implementation-plan.md
+      (Rung 8) regardless of the negative-by-threshold outcome.
+- [x] **v0.7 (HGBC-TE) remains the best model** -- v0.8 is the closest
+      challenger yet and the first non-tree-boosting family to reach parity.

@@ -30,6 +30,7 @@ below changed as a result of this publish.
 | v0.5 | 4-way blend: LightGBM + CatBoost-V1 + CatBoost-V2 + LogReg | reproduces v0.1/v0.3's exact configs + new LogReg baseline, nested-validated blend weight search | 0.9493 (nested blend: -0.0002 vs. solo CatBoost-V1) | not submitted | `notebooks/v0.5-ensemble.ipynb`; **negative result** — best blend degenerates to 100% CatBoost-V1, no diversity gain from any member |
 | v0.6 | XGBoost one-vs-rest (engineered feats) + CatBoost-V1/V2 | 3 binary XGB classifiers, `scale_pos_weight`, combined via argmax; blended with reproduced CatBoost-V1/V2 | 0.9493 solo (nested 3-way blend: +0.0001 vs. solo) | **0.94937** (2-way `xgb_ovr+catboost_v1` blend, weights 0.46/0.54) | `notebooks/v0.6-xgboost-ovr.ipynb`; **flat/negative per our own threshold** (honest improvement below 0.0005), but the curiosity-submission is the **highest LB score in this project so far** — see run log for the important caveat |
 | v0.7 | HistGradientBoostingClassifier + exact-value target encoding | all 13 raw features (incl. numerics at exact value) target-encoded via sklearn's native `TargetEncoder(cv=5)`; `class_weight='balanced'`, native categorical handling | **0.9502** (nested vs. solo CatBoost-V1: +0.0009) | **0.95036** | `notebooks/v0.7-hgbc-te.ipynb`; **POSITIVE result — new best model**, first genuine non-noise-level improvement in the squeeze phase (all of Rung 3-6 were within ±0.0005 of CatBoost-V1). Blend with CatBoost-V1 adds only +0.0002 more (not worth the complexity); HGBC-TE solo submitted directly |
+| v0.8 | RealMLP (neural net) + multi-resolution numeric target encoding | from-scratch PyTorch port of `yunsuxiaozi/pss6e7-realmlp-cv-0-95063`; periodic numeric embeddings, NTK-parametrized linears, 16-way ensemble-in-one-model, EMA; our own 5-fold split, single training-time class-weight correction only (no post-hoc reweighting); run locally (Apple M3 Pro, PyTorch MPS) | **0.95062 solo** (nested vs. current best: +0.0001, below threshold) | **0.95048** (curiosity submission, submission 54376269) | `notebooks/v0.8-realmlp.ipynb`; **flat result by our own strict threshold, but the highest raw solo OOF of any model in this project** — essentially a statistical tie with v0.7 (+0.0004 raw, nested-validated honest margin only +0.0001, short of the 0.0005 bar). First non-tree-boosting model family tried; blend with CatBoost-V1 only reaches 82/18 weighting (not degenerate to one member like v0.5), suggesting some real diversity, but not enough to clear threshold on its own. LB narrowly edges v0.7's LB (0.95036) by +0.00012 — within the same noise band documented throughout this project, not treated as a confirmed new best (same caveat as v0.6's curiosity submission) |
 
 ## Run log
 
@@ -296,3 +297,56 @@ below changed as a result of this publish.
   decomposition, and threshold tuning had all missed. Worth revisiting whether
   applying the same exact-value target encoding to CatBoost (rather than only to
   a new model family) could push further, as a follow-up.
+
+### 2026-07-05 — v0.8 RealMLP (neural net) — flat result by our own threshold, highest raw OOF yet
+- Surfaced by investigating `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` — see
+  `docs/investigate/2026-07-05-kaggle-discussion-findings.md`. First
+  neural-net model family in this project (all prior work: LightGBM,
+  CatBoost, XGBoost, HistGradientBoosting — all tree-boosting). From-scratch
+  PyTorch port: periodic numeric embeddings (`PBLDEmbedding`), NTK-parametrized
+  linear layers (`NTPLinear`), a 16-way ensemble-in-one-model trick, EMA of
+  weights, 5-parameter-group AdamW schedule. Our own `StratifiedKFold(5)`
+  (not the source's naive fold split); single training-time class-weight
+  correction only (the architecture's own `compute_class_weight('balanced')`
+  with a fixed `[0.9, 1.1, 1.0]` tweak) — the source's post-hoc Optuna
+  reweighting was **not** reproduced (our own investigation found it added
+  only +0.00006, negligible, a 5th confirmation of "tunable second correction
+  finds ~nothing extra").
+- Run **locally** on Apple M3 Pro (PyTorch MPS backend), not Kaggle. Found and
+  fixed a real bug during smoke-testing: pandas 3.0.3's `.astype(str)` now
+  produces a native `str` dtype rather than `object`, breaking the
+  categorical/numeric column classification (`dtype == object` no longer
+  matches) — fixed via `not pd.api.types.is_numeric_dtype(...)`.
+- **RealMLP solo OOF: 0.95062** — the **highest raw solo OOF of any model in
+  this project**, edging out v0.7 (0.9502) by +0.0004, and closely matching
+  the source notebook's own raw CV (0.95057, different fold split).
+  CatBoost-V1 reproduction: **PASS** (0.9493, exact match to v0.3 Variant 1).
+- **Blend check**: full-OOF grid search best 0.9507 at weights (realmlp=0.82,
+  catboost_v1=0.18) — notably NOT degenerate to 100% one model (unlike v0.5's
+  all-tree-boosting blend), suggesting some genuine diversity between a
+  neural net and a GBDT. **Nested validation**: nested solo (realmlp) 0.9506
+  (+/- 0.0012), nested blend 0.9507 (+/- 0.0012) — honest improvement only
+  **+0.0001**.
+- **Decision: NO REAL IMPROVEMENT, no submission written.** RealMLP solo's
+  raw margin over the current best (+0.0004) falls just short of the project's
+  0.0005 threshold for "real" (0.95062 vs. `CURRENT_BEST_OOF + 0.0005` =
+  0.9507) — essentially a statistical tie with v0.7, not a confirmed new best.
+  Nothing was submitted to Kaggle by the notebook's own decision logic.
+- **v0.7 (HGBC-TE) remains the best model.** This is the closest any
+  alternative has come to displacing it, and the first time a genuinely
+  different model family (not just a different tree-boosting library) reached
+  parity — worth keeping in mind if future blend attempts revisit RealMLP as a
+  diversity source, even though it doesn't clear the bar solo.
+- **Curiosity submission (2026-07-05)**: connected to the user's live local
+  Jupyter kernel (`jupyter_client.BlockingKernelClient`, via the running
+  server's `/api/sessions` to find the right kernel ID) to build a
+  submission.csv from the already-computed `test_proba_realmlp` predictions,
+  avoiding a wasteful full re-run, then submitted purely to see the actual LB
+  number (submission 54376269): **public LB 0.95048** — narrowly edges out
+  v0.7's LB (0.95036) by +0.00012, and closely tracks the OOF (0.95062, a
+  small -0.00014 haircut, consistent with this project's tight CV-LB
+  correlation). Per this project's own discipline, this margin is well within
+  the noise band documented extensively throughout (public LB scored on only
+  ~20% of test; competing models have swapped rank by ±0.0005 or more between
+  CV and LB elsewhere in this project). **Not treated as a confirmed new
+  best** — same caveat applied to v0.6's curiosity submission previously.

@@ -678,3 +678,132 @@ is now the best model, superseding v0.3 CatBoost.
   `leaderboard.md` and `TODO.md` but this file's per-notebook convention was
   missed for that one. Not backfilled here to stay in scope; worth doing if a
   future session revisits v0.6.
+
+## v0.8-realmlp
+
+### Context
+
+- Notebook: `notebooks/v0.8-realmlp.ipynb`.
+- Purpose: Rung 8 — test whether RealMLP, a from-scratch PyTorch neural-net
+  architecture, adds real signal vs. our current best (v0.7 HGBC-TE, OOF
+  0.9502), either solo or as a blend member. First non-tree-boosting model
+  family in this project. Surfaced by investigating
+  `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` — see
+  `docs/investigate/2026-07-05-kaggle-discussion-findings.md`.
+- Run venue: **local** (Apple M3 Pro, PyTorch MPS backend), per user request
+  — not Kaggle, unlike v0.7. Executed interactively by the user in their own
+  JupyterLab session (`http://localhost:8888`), not launched by the assistant.
+
+### Investigation Checklist
+
+- [x] Adapt the pulled source notebook: our own `StratifiedKFold(5)`, MPS
+      device detection, drop the source's post-hoc Optuna reweighting
+      (already found negligible), add the standard CatBoost-V1 reproduction +
+      blend/nested-validation/decision-logic cells matching v0.5/v0.6/v0.7.
+- [x] Smoke-test on a reduced sample before the full run.
+- [x] Monitor the user's live local run (no CLI/API for local Jupyter kernel
+      status — periodic autosave file reads instead) and report at milestones.
+- [x] Extract final solo/blend/nested-validation numbers and the decision
+      once complete.
+
+### Findings
+
+- **Smoke-test bug found and fixed**: pandas 3.0.3's `.astype(str)` now
+  produces a native `str` dtype rather than `object`, which broke the
+  `CATS = [c for c in test.columns if test[c].dtype == object or ...]`
+  categorical/numeric column classification (the binned `_cat`/`_cat2`
+  columns were silently misclassified as numeric, causing `np.median` to
+  fail on string data). Fixed via
+  `not pd.api.types.is_numeric_dtype(test[c])`. This was an environment
+  version-compatibility issue in the adaptation, not a bug in the source
+  notebook (presumably run under an older pandas where `.astype(str)` still
+  produced `object` dtype).
+- **Smoke-test progress-display iteration**: initial architecture-faithful
+  smoke run at reduced scale (15k rows, 2 folds, 2 epochs) showed RealMLP
+  accuracy near-random (0.43) — not a bug, but an artifact of the EMA decay
+  (0.997) needing far more gradient steps than a tiny smoke test provides to
+  converge away from random initialization. Confirmed by re-running at a
+  larger reduced scale (60k rows, 3 folds, 5 epochs), which reached a
+  sensible 0.9411 with visibly improving per-epoch accuracy. Also added
+  (then refined) `tqdm` progress bars for the training loop, which had none
+  initially (only per-fold/per-epoch `print` statements) — first added
+  nested fold/epoch/batch bars with `tqdm.write()` for status text, but the
+  user found this still produced separate print-like output blocks
+  interleaved with the progress widgets in Jupyter (each `tqdm.write()` call
+  and each new `tqdm()` instance creates its own output area in the
+  ipywidgets-based renderer). Final fix: collapsed to 2 nested levels
+  (folds, epochs) and moved all status info (class weights, loss, best
+  accuracy) into the bars' own `set_postfix()`/description instead of any
+  print/write call — eliminates all interleaved text blocks.
+- **Full local run results**:
+  - **RealMLP solo OOF: 0.95062** — the highest raw solo OOF of any model in
+    this project, edging out v0.7 (0.9502) by +0.0004, and closely matching
+    the source notebook's own raw CV (0.95057, different fold split).
+    Per-class recall: at-risk 0.9355, fit 0.9507, unhealthy 0.9657.
+  - **CatBoost-V1 reproduction: PASS** (0.9493 OOF, matching v0.3 Variant 1
+    exactly to 4 decimals). Per-fold `best_iterations` differed from v0.3's
+    original run (`[765, 461, 703, 516, 576]` vs. `[428, 950, 605, 339,
+    779]`) despite the same fold seed/config — plausibly CatBoost's
+    CPU floating-point nondeterminism across different hardware (local M3
+    Pro vs. wherever v0.3/v0.7 ran); the OOF score matching exactly confirms
+    this doesn't affect the actual reproduction validity.
+  - **Blend check**: full-OOF grid search best 0.9507 at weights
+    (realmlp=0.82, catboost_v1=0.18) — notably not degenerate to 100% one
+    member (unlike v0.5's all-tree-boosting blend), suggesting genuine
+    diversity between a neural net and a GBDT. Nested validation: nested
+    solo (realmlp) 0.9506 (+/- 0.0012), nested blend 0.9507 (+/- 0.0012) —
+    honest improvement only **+0.0001**.
+  - **Decision: NO REAL IMPROVEMENT, no submission written.** RealMLP
+    solo's raw margin over the current best (+0.0004) falls just short of
+    the project's 0.0005 threshold (0.95062 vs. `0.9502 + 0.0005` = 0.9507)
+    — essentially a statistical tie with v0.7, not a confirmed new best.
+    Nothing was submitted to Kaggle for this run.
+- **Monitoring note**: with no CLI/API to query a local Jupyter kernel's
+  live execution status, progress was tracked by periodically re-reading the
+  saved `.ipynb` file's cell `execution_count`/`outputs` (Jupyter autosaves
+  periodically) and by asking the user directly when the file hadn't changed
+  in an unusually long time (~52 minutes at one point) — confirmed by the
+  user that the kernel was still genuinely progressing (progress bar moving)
+  despite the autosave lag, i.e. file-mtime gaps are not a reliable
+  stuck/stalled signal on their own for a local session.
+
+### Actions Taken
+
+- Adapted the pulled `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` notebook into
+  `notebooks/v0.8-realmlp.ipynb` with the scope decisions in
+  `docs/plans/v0.8-realmlp-plan.md`.
+- Installed `torch` and `optuna` into the shared venv; confirmed PyTorch MPS
+  backend availability on the local Apple M3 Pro.
+- Ran multiple smoke tests at increasing scale to isolate and fix the pandas
+  dtype bug and validate the training loop converges correctly given enough
+  steps.
+- Iterated on `tqdm` progress-bar design based on direct user feedback while
+  they ran the full notebook themselves.
+- Monitored the user's live full run via periodic `.ipynb` file reads,
+  texted SMS updates at the RealMLP-training-done and full-decision
+  milestones.
+- Recorded the result in `leaderboard.md`, `implementation-plan.md`
+  (Rung 8), and `TODO.md` (Phase 10).
+
+### Resolution
+
+**resolved** — a flat result by the project's own strict threshold, but a
+genuinely close one: the highest raw OOF of any model tried, and the first
+non-tree-boosting model family to reach parity with the best tree-based
+model. No submission made (correctly, per the decision logic). v0.7
+(HGBC-TE) remains the best model.
+
+### Follow-ups
+
+- **RealMLP is the best-positioned diversity source found so far** if blend
+  work is revisited — the 82/18 non-degenerate blend weight (vs. v0.5's
+  100/0 collapse) suggests it captures somewhat different errors than the
+  tree-boosting models, even though it doesn't clear the solo-improvement
+  bar on its own. A worthwhile next experiment would be blending RealMLP
+  with v0.7 (HGBC-TE, the actual current best) rather than CatBoost-V1 (this
+  run's comparison peg), in case that pairing clears the threshold where
+  RealMLP+CatBoost-V1 didn't.
+- The pandas 3.0.3 `.astype(str)` dtype-detection issue is worth remembering
+  for any future notebook that classifies columns by `dtype == object` —
+  prefer `pd.api.types.is_numeric_dtype()`/`is_string_dtype()` checks instead,
+  since they're robust across pandas versions.
