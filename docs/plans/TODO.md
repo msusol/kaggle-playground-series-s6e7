@@ -1,5 +1,9 @@
 # TODO
 
+_Archived 2026-07-05 — all per-version plan docs (v0.1 through v0.8) moved to
+`docs/plans/archive/`; every phase below is complete and each version's plan
+is superseded by its recorded results in `leaderboard.md`/`implementation-plan.md`._
+
 ## Phase 0 - Setup
 - [x] ~/.kaggle/kaggle.json present
 - [x] `zsh scripts/download_data.sh` exits 0 (halts + prints a rules-acceptance URL if

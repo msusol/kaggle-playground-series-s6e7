@@ -339,7 +339,7 @@ informative" and "adding it nets a better model."
 
 ### Actions Taken
 
-- Built `notebooks/v0.3-catboost-bakeoff.ipynb` and `docs/plans/v0.3-catboost-bakeoff-plan.md`.
+- Built `notebooks/v0.3-catboost-bakeoff.ipynb` and `docs/plans/archive/v0.3-catboost-bakeoff-plan.md`.
 - Smoke-tested the full pipeline (both variants, custom metric, tqdm callback,
   feature-engineering reconstruction, comparison/submission logic) on a 20k/10k-row
   data sample before committing to the full run — no bugs found this time (unlike
@@ -771,7 +771,7 @@ is now the best model, superseding v0.3 CatBoost.
 
 - Adapted the pulled `yunsuxiaozi/pss6e7-realmlp-cv-0-95063` notebook into
   `notebooks/v0.8-realmlp.ipynb` with the scope decisions in
-  `docs/plans/v0.8-realmlp-plan.md`.
+  `docs/plans/archive/v0.8-realmlp-plan.md`.
 - Installed `torch` and `optuna` into the shared venv; confirmed PyTorch MPS
   backend availability on the local Apple M3 Pro.
 - Ran multiple smoke tests at increasing scale to isolate and fix the pandas
